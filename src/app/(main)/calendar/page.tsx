@@ -23,7 +23,7 @@ import type {
   EventScope,
   EventType,
 } from '@/types/database'
-import { cn } from '@/lib/utils'
+import { cn, getErrorMessage } from '@/lib/utils'
 import { SCHOOL_PERIODS, findPeriodByValue } from '@/lib/school-schedule'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -662,8 +662,7 @@ export default function CalendarPage() {
       await fetchAll()
     } catch (err) {
       console.error('Save event failed:', err)
-      const message = err instanceof Error ? err.message : String(err)
-      alert(`저장에 실패했습니다: ${message}`)
+      alert(`저장에 실패했습니다: ${getErrorMessage(err)}`)
     } finally {
       setSubmitting(false)
     }
@@ -674,7 +673,8 @@ export default function CalendarPage() {
     const supabase = createClient()
     const { error } = await supabase.from('events').delete().eq('id', eventId)
     if (error) {
-      alert(`삭제 실패: ${error.message}`)
+      console.error('Delete event failed:', error)
+      alert(`삭제 실패: ${getErrorMessage(error)}`)
       return
     }
     await fetchAll()
@@ -694,7 +694,8 @@ export default function CalendarPage() {
         })
         .eq('id', event.id)
       if (error) {
-        alert(`완료 처리 실패: ${error.message}`)
+        console.error('Toggle completion failed:', error)
+        alert(`완료 처리 실패: ${getErrorMessage(error)}`)
         return
       }
     } else {
@@ -705,7 +706,8 @@ export default function CalendarPage() {
           .eq('event_id', event.id)
           .eq('user_id', user.id)
         if (error) {
-          alert(`완료 취소 실패: ${error.message}`)
+          console.error('Uncomplete failed:', error)
+          alert(`완료 취소 실패: ${getErrorMessage(error)}`)
           return
         }
       } else {
@@ -714,7 +716,8 @@ export default function CalendarPage() {
           user_id: user.id,
         })
         if (error) {
-          alert(`완료 처리 실패: ${error.message}`)
+          console.error('Complete failed:', error)
+          alert(`완료 처리 실패: ${getErrorMessage(error)}`)
           return
         }
       }
@@ -769,7 +772,8 @@ export default function CalendarPage() {
       setMemoDraft('')
       await fetchAll()
     } catch (err) {
-      alert(`메모 저장 실패: ${err instanceof Error ? err.message : String(err)}`)
+      console.error('Save memo failed:', err)
+      alert(`메모 저장 실패: ${getErrorMessage(err)}`)
     } finally {
       setSavingMemo(false)
     }

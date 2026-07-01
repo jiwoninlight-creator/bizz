@@ -6,7 +6,7 @@ import { createClient } from '@/lib/supabase-client'
 import { useUser } from '@/hooks/useUser'
 import { CLASS_OPTIONS } from '@/lib/school-schedule'
 import type { ClassLeaderType } from '@/types/database'
-import { cn } from '@/lib/utils'
+import { cn, getErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -64,8 +64,8 @@ export default function SettingsPage() {
       await refresh()
       alert('반 정보를 저장했어요.')
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      alert(`저장 실패: ${message}`)
+      console.error('Save class failed:', err)
+      alert(`저장 실패: ${getErrorMessage(err)}`)
     } finally {
       setSavingClass(false)
     }
@@ -94,8 +94,8 @@ export default function SettingsPage() {
           : '반장/부반장 신청이 접수되었어요. 관리자 승인을 기다려주세요.'
       )
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      alert(`저장 실패: ${message}`)
+      console.error('Apply leader failed:', err)
+      alert(`저장 실패: ${getErrorMessage(err)}`)
     } finally {
       setSavingLeader(false)
     }
@@ -120,8 +120,8 @@ export default function SettingsPage() {
       setLeaderChoice('none')
       alert('권한을 취소했어요.')
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err)
-      alert(`취소 실패: ${message}`)
+      console.error('Cancel leader failed:', err)
+      alert(`취소 실패: ${getErrorMessage(err)}`)
     } finally {
       setSavingLeader(false)
     }

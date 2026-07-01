@@ -81,6 +81,7 @@ export type Material = {
   file_url: string
   file_type: MaterialFileType
   file_size: number
+  original_filename: string | null
   uploaded_by: string
   status: MaterialStatus
   approved_by: string | null

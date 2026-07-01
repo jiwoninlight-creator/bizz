@@ -9,6 +9,7 @@ import {
   XIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase-client'
+import { getErrorMessage } from '@/lib/utils'
 import { useUser } from '@/hooks/useUser'
 import type {
   ClassLeaderType,
@@ -142,11 +143,13 @@ export default function AdminDashboardPage() {
     setLoadingEvents(false)
   }, [])
 
-  useEffect(() => {
-    fetchLeaders()
-    fetchMaterials()
-    fetchEvents()
+  const fetchAll = useCallback(async () => {
+    await Promise.all([fetchLeaders(), fetchMaterials(), fetchEvents()])
   }, [fetchLeaders, fetchMaterials, fetchEvents])
+
+  useEffect(() => {
+    fetchAll()
+  }, [fetchAll])
 
   const approveLeader = async (a: LeaderApplicant) => {
     setItemBusy(a.id, true)
@@ -159,7 +162,8 @@ export default function AdminDashboardPage() {
       if (error) throw error
       await fetchLeaders()
     } catch (err) {
-      alert(`승인 실패: ${err instanceof Error ? err.message : String(err)}`)
+      console.error('Approve leader failed:', err)
+      alert(`승인 실패: ${getErrorMessage(err)}`)
     } finally {
       setItemBusy(a.id, false)
     }
@@ -177,7 +181,8 @@ export default function AdminDashboardPage() {
       if (error) throw error
       await fetchLeaders()
     } catch (err) {
-      alert(`반려 실패: ${err instanceof Error ? err.message : String(err)}`)
+      console.error('Reject leader failed:', err)
+      alert(`반려 실패: ${getErrorMessage(err)}`)
     } finally {
       setItemBusy(a.id, false)
     }
@@ -199,7 +204,8 @@ export default function AdminDashboardPage() {
       if (error) throw error
       await fetchMaterials()
     } catch (err) {
-      alert(`승인 실패: ${err instanceof Error ? err.message : String(err)}`)
+      console.error('Approve material failed:', err)
+      alert(`승인 실패: ${getErrorMessage(err)}`)
     } finally {
       setItemBusy(m.id, false)
     }
@@ -217,7 +223,8 @@ export default function AdminDashboardPage() {
       if (error) throw error
       await fetchMaterials()
     } catch (err) {
-      alert(`반려 실패: ${err instanceof Error ? err.message : String(err)}`)
+      console.error('Reject material failed:', err)
+      alert(`반려 실패: ${getErrorMessage(err)}`)
     } finally {
       setItemBusy(m.id, false)
     }
@@ -235,7 +242,8 @@ export default function AdminDashboardPage() {
       if (error) throw error
       await fetchEvents()
     } catch (err) {
-      alert(`승인 실패: ${err instanceof Error ? err.message : String(err)}`)
+      console.error('Approve event failed:', err)
+      alert(`승인 실패: ${getErrorMessage(err)}`)
     } finally {
       setItemBusy(e.id, false)
     }
@@ -253,7 +261,8 @@ export default function AdminDashboardPage() {
       if (error) throw error
       await fetchEvents()
     } catch (err) {
-      alert(`반려 실패: ${err instanceof Error ? err.message : String(err)}`)
+      console.error('Reject event failed:', err)
+      alert(`반려 실패: ${getErrorMessage(err)}`)
     } finally {
       setItemBusy(e.id, false)
     }

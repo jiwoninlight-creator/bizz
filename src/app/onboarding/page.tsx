@@ -7,7 +7,7 @@ import { createClient } from '@/lib/supabase-client'
 import { useUser } from '@/hooks/useUser'
 import { CLASS_OPTIONS } from '@/lib/school-schedule'
 import type { ClassLeaderType } from '@/types/database'
-import { cn } from '@/lib/utils'
+import { cn, getErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -65,8 +65,7 @@ export default function OnboardingPage() {
       router.refresh()
     } catch (err) {
       console.error('Onboarding failed:', err)
-      const message = err instanceof Error ? err.message : String(err)
-      alert(`저장에 실패했습니다: ${message}`)
+      alert(`저장에 실패했습니다: ${getErrorMessage(err)}`)
     } finally {
       setSubmitting(false)
     }

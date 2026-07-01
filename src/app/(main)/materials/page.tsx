@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { PlusIcon, SearchIcon, Loader2Icon } from 'lucide-react'
 import { createClient } from '@/lib/supabase-client'
+import { getErrorMessage } from '@/lib/utils'
 import { useUser } from '@/hooks/useUser'
 import type {
   MaterialFileType,
@@ -216,6 +217,7 @@ export default function MaterialsPage() {
         file_url: publicUrl,
         file_type: getFileType(formFile.name),
         file_size: formFile.size,
+        original_filename: formFile.name,
         uploaded_by: user.id,
         status: 'pending',
       })
@@ -227,8 +229,7 @@ export default function MaterialsPage() {
       await fetchMaterials()
     } catch (err) {
       console.error('Upload failed:', err)
-      const message = err instanceof Error ? err.message : String(err)
-      alert(`업로드에 실패했습니다: ${message}`)
+      alert(`업로드에 실패했습니다: ${getErrorMessage(err)}`)
     } finally {
       setSubmitting(false)
     }

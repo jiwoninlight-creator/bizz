@@ -1,6 +1,12 @@
 'use client'
 
-import { FileTextIcon, FileIcon, ImageIcon, DownloadIcon, ExternalLinkIcon } from 'lucide-react'
+import {
+  FileTextIcon,
+  FileIcon,
+  ImageIcon,
+  DownloadIcon,
+  ExternalLinkIcon,
+} from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import type { MaterialFileType, MaterialWithTeacher } from '@/types/database'
@@ -10,6 +16,7 @@ type FileTypeStyle = {
   label: string
   bg: string
   fg: string
+  ext: string
 }
 
 const FILE_TYPE_STYLES: Record<MaterialFileType, FileTypeStyle> = {
@@ -18,24 +25,28 @@ const FILE_TYPE_STYLES: Record<MaterialFileType, FileTypeStyle> = {
     label: 'PDF',
     bg: 'bg-red-100',
     fg: 'text-red-600',
+    ext: 'pdf',
   },
   hwp: {
     Icon: FileIcon,
     label: 'HWP',
     bg: 'bg-blue-100',
     fg: 'text-blue-600',
+    ext: 'hwp',
   },
   image: {
     Icon: ImageIcon,
     label: 'IMG',
     bg: 'bg-green-100',
     fg: 'text-green-600',
+    ext: 'jpg',
   },
   other: {
     Icon: FileIcon,
     label: 'FILE',
     bg: 'bg-slate-100',
     fg: 'text-slate-600',
+    ext: '',
   },
 }
 
@@ -60,9 +71,35 @@ function inferFilename(url: string): string {
   }
 }
 
+function extFromUrl(url: string): string {
+  try {
+    const path = new URL(url).pathname
+    const last = path.split('/').pop() || ''
+    const dot = last.lastIndexOf('.')
+    if (dot < 0) return ''
+    return last.slice(dot + 1).toLowerCase()
+  } catch {
+    return ''
+  }
+}
+
+function resolveDownloadName(material: MaterialWithTeacher): string {
+  if (material.original_filename && material.original_filename.trim()) {
+    return material.original_filename
+  }
+  const styleExt = FILE_TYPE_STYLES[material.file_type]?.ext ?? ''
+  const urlExt = extFromUrl(material.file_url)
+  const ext = urlExt || styleExt
+  if (material.title) {
+    return ext ? `${material.title}.${ext}` : material.title
+  }
+  return inferFilename(material.file_url)
+}
+
 async function downloadFile(url: string, filename: string) {
   try {
     const res = await fetch(url)
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const blob = await res.blob()
     const objectUrl = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -89,13 +126,15 @@ export default function MaterialCard({ material, currentUserId }: Props) {
   const isOwnPending =
     material.status === 'pending' && material.uploaded_by === currentUserId
   const isInline = material.file_type === 'pdf' || material.file_type === 'image'
+  const displayFilename = material.original_filename ?? null
+  const showOriginal =
+    !!displayFilename && displayFilename.trim() !== material.title.trim()
 
   const handleClick = () => {
     if (isInline) {
       window.open(material.file_url, '_blank', 'noopener,noreferrer')
     } else {
-      const filename = inferFilename(material.file_url)
-      downloadFile(material.file_url, filename)
+      downloadFile(material.file_url, resolveDownloadName(material))
     }
   }
 
@@ -103,6 +142,7 @@ export default function MaterialCard({ material, currentUserId }: Props) {
     <Card
       size="sm"
       onClick={handleClick}
+      title={displayFilename ?? undefined}
       className="cursor-pointer transition-all hover:ring-2 hover:ring-blue-400 active:scale-[0.98]"
     >
       <div className="flex items-start gap-3 px-3">
@@ -138,6 +178,11 @@ export default function MaterialCard({ material, currentUserId }: Props) {
               </>
             )}
           </div>
+          {showOriginal && (
+            <p className="mt-0.5 line-clamp-1 text-[10px] text-slate-400">
+              {displayFilename}
+            </p>
+          )}
           <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
             <span>{formatDate(material.created_at)}</span>
             <span className="flex items-center gap-1 text-slate-500">
