@@ -1,8 +1,15 @@
 'use client'
 
 import Link from 'next/link'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { LogOutIcon, SettingsIcon, ShieldIcon } from 'lucide-react'
+import {
+  ClockIcon,
+  GraduationCapIcon,
+  LogOutIcon,
+  SettingsIcon,
+  ShieldIcon,
+} from 'lucide-react'
 import { createClient } from '@/lib/supabase-client'
 import { useUser } from '@/hooks/useUser'
 import { cn } from '@/lib/utils'
@@ -16,19 +23,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import type { User } from '@/types/database'
+import type { Teacher, TeacherStatus, User } from '@/types/database'
+
+const STATUS_DOT: Record<TeacherStatus, string> = {
+  available: 'bg-green-500',
+  in_class: 'bg-yellow-500',
+  meeting: 'bg-red-500',
+  out: 'bg-red-500',
+  unknown: 'bg-slate-300',
+}
 
 function GradeClassBadge({ profile }: { profile: User }) {
-  if (profile.role === 'teacher') {
-    return (
-      <Badge
-        variant="secondary"
-        className="bg-purple-100 text-purple-700 hover:bg-purple-100"
-      >
-        선생님
-      </Badge>
-    )
-  }
   if (profile.role === 'admin') {
     return (
       <Badge
@@ -36,6 +41,26 @@ function GradeClassBadge({ profile }: { profile: User }) {
         className="bg-red-100 text-red-700 hover:bg-red-100"
       >
         관리자
+      </Badge>
+    )
+  }
+  if (profile.role === 'teacher') {
+    if (profile.teacher_status === 'pending') {
+      return (
+        <Badge
+          variant="secondary"
+          className="bg-amber-100 text-amber-700 hover:bg-amber-100"
+        >
+          선생님 승인 대기
+        </Badge>
+      )
+    }
+    return (
+      <Badge
+        variant="secondary"
+        className="bg-purple-100 text-purple-700 hover:bg-purple-100"
+      >
+        선생님
       </Badge>
     )
   }
@@ -67,9 +92,44 @@ function LeaderBadge({ profile }: { profile: User }) {
   )
 }
 
+function TeacherMetaBadges({ teacher }: { teacher: Teacher }) {
+  return (
+    <>
+      <Badge
+        variant="secondary"
+        className="bg-blue-100 text-blue-700 hover:bg-blue-100"
+      >
+        {teacher.subject}
+      </Badge>
+      <span
+        className={cn(
+          'inline-block h-2 w-2 rounded-full',
+          STATUS_DOT[teacher.current_status] ?? STATUS_DOT.unknown
+        )}
+        title={teacher.current_status}
+      />
+    </>
+  )
+}
+
 export default function Header() {
   const router = useRouter()
-  const { user, profile, isAdmin } = useUser()
+  const { user, profile, isAdmin, isTeacher } = useUser()
+  const [myTeacher, setMyTeacher] = useState<Teacher | null>(null)
+
+  useEffect(() => {
+    if (!isTeacher || !user?.id) {
+      setMyTeacher(null)
+      return
+    }
+    const supabase = createClient()
+    supabase
+      .from('teachers')
+      .select('*')
+      .eq('user_id', user.id)
+      .maybeSingle<Teacher>()
+      .then(({ data }) => setMyTeacher(data ?? null))
+  }, [isTeacher, user?.id])
 
   const handleLogout = async () => {
     const supabase = createClient()
@@ -90,6 +150,7 @@ export default function Header() {
     (typeof metadata.picture === 'string' ? metadata.picture : null) ??
     null
   const initial = displayName.trim().slice(0, 1) || '?'
+  const showProfileLink = profile?.role === 'teacher'
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
@@ -109,6 +170,9 @@ export default function Header() {
               </span>
               <GradeClassBadge profile={profile} />
               <LeaderBadge profile={profile} />
+              {isTeacher && myTeacher && (
+                <TeacherMetaBadges teacher={myTeacher} />
+              )}
             </>
           ) : null}
 
@@ -141,6 +205,31 @@ export default function Header() {
                 )}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              {showProfileLink && (
+                <DropdownMenuItem asChild>
+                  <Link
+                    href="/settings"
+                    className="flex items-center gap-1.5"
+                  >
+                    <GraduationCapIcon />
+                    <span>프로필 관리</span>
+                    {myTeacher && (
+                      <span
+                        className={cn(
+                          'ml-auto inline-block h-2 w-2 rounded-full',
+                          STATUS_DOT[myTeacher.current_status]
+                        )}
+                      />
+                    )}
+                  </Link>
+                </DropdownMenuItem>
+              )}
+              {profile?.role === 'teacher' && profile.teacher_status === 'pending' && (
+                <DropdownMenuItem disabled className="text-amber-700">
+                  <ClockIcon />
+                  <span>선생님 승인 대기 중</span>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem asChild>
                 <Link href="/settings" className="flex items-center gap-1.5">
                   <SettingsIcon />

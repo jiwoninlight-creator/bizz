@@ -11,6 +11,7 @@ type UseUserResult = {
   loading: boolean
   isAdmin: boolean
   isClassLeader: boolean
+  isTeacher: boolean
   refresh: () => Promise<void>
 }
 
@@ -78,6 +79,16 @@ export function useUser(): UseUserResult {
   const isClassLeader =
     profile?.role === 'class_leader' &&
     profile?.class_leader_status === 'approved'
+  const isTeacher =
+    profile?.role === 'teacher' && profile?.teacher_status === 'approved'
 
-  return { user, profile, loading, isAdmin, isClassLeader, refresh }
+  return {
+    user,
+    profile,
+    loading,
+    isAdmin,
+    isClassLeader,
+    isTeacher,
+    refresh,
+  }
 }

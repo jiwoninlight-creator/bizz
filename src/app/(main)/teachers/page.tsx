@@ -7,17 +7,20 @@ import {
   MessageCircleIcon,
   MapPinIcon,
   Loader2Icon,
+  FileTextIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase-client'
 import { useUser } from '@/hooks/useUser'
 import type {
+  MaterialWithTeacher,
   MessagePurpose,
   MessageTone,
   Teacher,
   TeacherSchedule,
   TeacherStatus,
 } from '@/types/database'
-import { cn } from '@/lib/utils'
+import MaterialCard from '@/components/MaterialCard'
+import { cn, getErrorMessage } from '@/lib/utils'
 import { Card } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -225,23 +228,29 @@ function ScheduleGrid({
 
 function TeacherDetailDialog({
   teacher,
+  currentUserId,
   open,
   onOpenChange,
   onSendMessage,
 }: {
   teacher: Teacher
+  currentUserId?: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onSendMessage: () => void
 }) {
   const [schedules, setSchedules] = useState<TeacherSchedule[]>([])
+  const [materials, setMaterials] = useState<MaterialWithTeacher[]>([])
   const [loading, setLoading] = useState(false)
+  const [materialsLoading, setMaterialsLoading] = useState(false)
 
   useEffect(() => {
     if (!open) return
     let active = true
     setLoading(true)
+    setMaterialsLoading(true)
     const supabase = createClient()
+
     supabase
       .from('teacher_schedules')
       .select('*')
@@ -250,24 +259,44 @@ function TeacherDetailDialog({
       .order('period', { ascending: true })
       .then(({ data, error }) => {
         if (!active) return
-        if (error) {
-          console.error('Failed to load schedule:', error)
-          setSchedules([])
-        } else {
-          setSchedules((data ?? []) as TeacherSchedule[])
-        }
+        if (error) console.error('Failed to load schedule:', error)
+        setSchedules((data ?? []) as TeacherSchedule[])
         setLoading(false)
       })
+
+    supabase
+      .from('materials')
+      .select('*, teacher:teachers(id, name, subject)')
+      .eq('teacher_id', teacher.id)
+      .eq('status', 'approved')
+      .order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (!active) return
+        if (error) console.error('Failed to load teacher materials:', error)
+        setMaterials((data ?? []) as MaterialWithTeacher[])
+        setMaterialsLoading(false)
+      })
+
     return () => {
       active = false
     }
   }, [teacher.id, open])
 
+  const materialsByGrade = useMemo(() => {
+    const map = new Map<number, MaterialWithTeacher[]>()
+    for (const m of materials) {
+      const arr = map.get(m.grade) ?? []
+      arr.push(m)
+      map.set(m.grade, arr)
+    }
+    return Array.from(map.entries()).sort(([a], [b]) => a - b)
+  }, [materials])
+
   const meta = STATUS_META[teacher.current_status]
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <div className="flex items-start gap-3">
             <Avatar className="h-16 w-16 shrink-0">
@@ -315,6 +344,58 @@ function TeacherDetailDialog({
               이번 주 시간표
             </h3>
             <ScheduleGrid schedules={schedules} loading={loading} />
+          </div>
+
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
+                <FileTextIcon className="h-4 w-4 text-purple-500" />
+                이 선생님의 자료
+              </h3>
+              {!materialsLoading && materials.length > 0 && (
+                <span className="text-xs text-slate-400">
+                  총 {materials.length}개
+                </span>
+              )}
+            </div>
+            {materialsLoading ? (
+              <div className="flex items-center justify-center py-4 text-slate-400">
+                <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
+                <span className="text-xs">불러오는 중…</span>
+              </div>
+            ) : materials.length === 0 ? (
+              <div className="rounded-lg border border-dashed border-slate-200 py-4 text-center text-xs text-slate-400">
+                아직 등록된 자료가 없어요
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {materialsByGrade.map(([grade, list]) => (
+                  <div key={grade}>
+                    <div className="mb-1.5 flex items-center gap-1.5">
+                      <Badge
+                        variant="outline"
+                        className="h-5 px-1.5 text-[10px]"
+                      >
+                        {grade}학년
+                      </Badge>
+                      <span className="text-[10px] text-slate-400">
+                        {list.length}개
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      {list.map((m) => (
+                        <MaterialCard
+                          key={m.id}
+                          material={m}
+                          currentUserId={currentUserId}
+                          compact
+                        />
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
@@ -381,8 +462,7 @@ function MessageDialog({
       onSent()
     } catch (err) {
       console.error('Send message failed:', err)
-      const msg = err instanceof Error ? err.message : String(err)
-      alert(`전송에 실패했어요: ${msg}`)
+      alert(`전송에 실패했어요: ${getErrorMessage(err)}`)
     } finally {
       setSubmitting(false)
     }
@@ -509,6 +589,16 @@ export default function TeachersPage() {
     async function load() {
       setLoading(true)
       const supabase = createClient()
+      const { data: pendingRows, error: pendingErr } = await supabase
+        .from('users')
+        .select('id')
+        .eq('role', 'teacher')
+        .eq('teacher_status', 'pending')
+      if (pendingErr) console.error('Failed to load pending teachers:', pendingErr)
+      const pendingUserIds = new Set(
+        (pendingRows ?? []).map((r: { id: string }) => r.id)
+      )
+
       let query = supabase
         .from('teachers')
         .select('*')
@@ -516,9 +606,7 @@ export default function TeachersPage() {
 
       if (debouncedSearch) {
         const term = debouncedSearch.replace(/[%,]/g, '')
-        query = query.or(
-          `name.ilike.%${term}%,subject.ilike.%${term}%`
-        )
+        query = query.or(`name.ilike.%${term}%,subject.ilike.%${term}%`)
       }
 
       const { data, error } = await query
@@ -527,7 +615,13 @@ export default function TeachersPage() {
         console.error('Failed to load teachers:', error)
         setTeachers([])
       } else {
-        setTeachers((data ?? []) as Teacher[])
+        const rows = (data ?? []) as Teacher[]
+        const visible = rows.filter((t) => {
+          if (!t.is_self_registered) return true
+          if (!t.user_id) return true
+          return !pendingUserIds.has(t.user_id)
+        })
+        setTeachers(visible)
       }
       setLoading(false)
     }
@@ -594,6 +688,7 @@ export default function TeachersPage() {
       {selected && (
         <TeacherDetailDialog
           teacher={selected}
+          currentUserId={user?.id}
           open={detailOpen}
           onOpenChange={setDetailOpen}
           onSendMessage={handleSendMessage}

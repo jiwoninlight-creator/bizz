@@ -1,6 +1,6 @@
 import { createClient } from '@/lib/supabase-server'
 import { NextResponse } from 'next/server'
-import { getGradeFromEmail, isTeacherEmail } from '@/lib/grade-utils'
+import { getGradeFromEmail } from '@/lib/grade-utils'
 import { isAdminEmail } from '@/lib/admin-config'
 
 export async function GET(request: Request) {
@@ -20,8 +20,7 @@ export async function GET(request: Request) {
 
   const email = (data.user.email ?? '').toLowerCase()
   const isAdmin = isAdminEmail(email)
-  const isTeacher = !isAdmin && isTeacherEmail(email)
-  const grade = isAdmin || isTeacher ? null : getGradeFromEmail(email)
+  const grade = isAdmin ? null : getGradeFromEmail(email)
 
   const { data: existingUser } = await supabase
     .from('users')
@@ -30,8 +29,6 @@ export async function GET(request: Request) {
     .single()
 
   if (!existingUser) {
-    const role = isAdmin ? 'admin' : isTeacher ? 'teacher' : 'student'
-    const onboarded = isAdmin || isTeacher
     await supabase.from('users').insert({
       id: data.user.id,
       email,
@@ -39,17 +36,17 @@ export async function GET(request: Request) {
         data.user.user_metadata.full_name ||
         data.user.user_metadata.name ||
         email.split('@')[0],
-      role,
+      role: isAdmin ? 'admin' : 'student',
       grade,
       class_number: null,
       class_leader_type: null,
       class_leader_status: 'none',
-      onboarded,
+      teacher_status: 'none',
+      onboarded: isAdmin,
       avatar_url: data.user.user_metadata.avatar_url ?? null,
     })
 
     if (isAdmin) return NextResponse.redirect(`${origin}/admin`)
-    if (isTeacher) return NextResponse.redirect(`${origin}/calendar`)
     return NextResponse.redirect(`${origin}/onboarding`)
   }
 

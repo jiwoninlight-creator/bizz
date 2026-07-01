@@ -1,14 +1,17 @@
 'use client'
 
+import type { MouseEvent } from 'react'
 import {
   FileTextIcon,
   FileIcon,
   ImageIcon,
   DownloadIcon,
   ExternalLinkIcon,
+  Trash2Icon,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import type { MaterialFileType, MaterialWithTeacher } from '@/types/database'
 
 type FileTypeStyle = {
@@ -118,13 +121,23 @@ async function downloadFile(url: string, filename: string) {
 type Props = {
   material: MaterialWithTeacher
   currentUserId?: string
+  canDelete?: boolean
+  onDelete?: (m: MaterialWithTeacher) => void
+  compact?: boolean
 }
 
-export default function MaterialCard({ material, currentUserId }: Props) {
+export default function MaterialCard({
+  material,
+  currentUserId,
+  canDelete,
+  onDelete,
+  compact,
+}: Props) {
   const style = FILE_TYPE_STYLES[material.file_type] ?? FILE_TYPE_STYLES.other
   const { Icon } = style
   const isOwnPending =
     material.status === 'pending' && material.uploaded_by === currentUserId
+  const isPending = material.status === 'pending'
   const isInline = material.file_type === 'pdf' || material.file_type === 'image'
   const displayFilename = material.original_filename ?? null
   const showOriginal =
@@ -138,6 +151,11 @@ export default function MaterialCard({ material, currentUserId }: Props) {
     }
   }
 
+  const handleDeleteClick = (e: MouseEvent) => {
+    e.stopPropagation()
+    onDelete?.(material)
+  }
+
   return (
     <Card
       size="sm"
@@ -147,16 +165,16 @@ export default function MaterialCard({ material, currentUserId }: Props) {
     >
       <div className="flex items-start gap-3 px-3">
         <div
-          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-lg ${style.bg}`}
+          className={`flex ${compact ? 'h-10 w-10' : 'h-12 w-12'} shrink-0 items-center justify-center rounded-lg ${style.bg}`}
         >
-          <Icon className={`h-6 w-6 ${style.fg}`} />
+          <Icon className={`${compact ? 'h-5 w-5' : 'h-6 w-6'} ${style.fg}`} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <h3 className="line-clamp-2 text-sm font-semibold text-slate-900">
               {material.title}
             </h3>
-            <div className="flex shrink-0 gap-1">
+            <div className="flex shrink-0 items-start gap-1">
               {isNew(material.created_at) && material.status === 'approved' && (
                 <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
                   NEW
@@ -166,6 +184,24 @@ export default function MaterialCard({ material, currentUserId }: Props) {
                 <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
                   승인 대기
                 </Badge>
+              )}
+              {isPending && !isOwnPending && (
+                <Badge
+                  className="h-5 bg-amber-100 px-1.5 text-[10px] text-amber-700 hover:bg-amber-100"
+                >
+                  대기
+                </Badge>
+              )}
+              {canDelete && onDelete && (
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-slate-400 hover:text-red-600"
+                  onClick={handleDeleteClick}
+                  aria-label="자료 삭제"
+                >
+                  <Trash2Icon />
+                </Button>
               )}
             </div>
           </div>
@@ -177,7 +213,24 @@ export default function MaterialCard({ material, currentUserId }: Props) {
                 <span>{material.teacher.name} 선생님</span>
               </>
             )}
+            {material.category && material.category !== material.subject && (
+              <>
+                <span>·</span>
+                <span className="text-slate-500">{material.category}</span>
+              </>
+            )}
           </div>
+          {(material.class_number || material.grade) && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              <Badge
+                variant="outline"
+                className="h-4 px-1.5 text-[10px] border-slate-200"
+              >
+                {material.grade}학년
+                {material.class_number ? ` ${material.class_number}반` : ''}
+              </Badge>
+            </div>
+          )}
           {showOriginal && (
             <p className="mt-0.5 line-clamp-1 text-[10px] text-slate-400">
               {displayFilename}

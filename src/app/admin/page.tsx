@@ -15,6 +15,7 @@ import type {
   ClassLeaderType,
   Event,
   Material,
+  Teacher,
   User,
 } from '@/types/database'
 import { Badge } from '@/components/ui/badge'
@@ -37,6 +38,16 @@ type LeaderApplicant = Pick<
   | 'class_leader_type'
   | 'class_leader_status'
 >
+
+type TeacherApplicant = Pick<
+  User,
+  'id' | 'name' | 'email' | 'teacher_status'
+> & {
+  teacher_profile: Pick<
+    Teacher,
+    'id' | 'subject' | 'office_location' | 'managed_grades'
+  > | null
+}
 
 type PendingMaterial = Material & {
   uploader: Pick<User, 'id' | 'name' | 'email'> | null
@@ -90,10 +101,14 @@ export default function AdminDashboardPage() {
   const { user } = useUser()
 
   const [leaders, setLeaders] = useState<LeaderApplicant[]>([])
+  const [teacherApplicants, setTeacherApplicants] = useState<TeacherApplicant[]>(
+    []
+  )
   const [materials, setMaterials] = useState<PendingMaterial[]>([])
   const [events, setEvents] = useState<PendingEvent[]>([])
 
   const [loadingLeaders, setLoadingLeaders] = useState(true)
+  const [loadingTeachers, setLoadingTeachers] = useState(true)
   const [loadingMaterials, setLoadingMaterials] = useState(true)
   const [loadingEvents, setLoadingEvents] = useState(true)
   const [busy, setBusy] = useState<Record<string, boolean>>({})
@@ -114,6 +129,43 @@ export default function AdminDashboardPage() {
     if (error) console.error(error)
     setLeaders((data ?? []) as LeaderApplicant[])
     setLoadingLeaders(false)
+  }, [])
+
+  const fetchTeachers = useCallback(async () => {
+    setLoadingTeachers(true)
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('users')
+      .select(
+        'id, name, email, teacher_status, teacher_profile:teachers!user_id(id, subject, office_location, managed_grades)'
+      )
+      .eq('teacher_status', 'pending')
+      .order('created_at', { ascending: true })
+    if (error) console.error(error)
+    const shaped = (data ?? []).map((row) => {
+      const r = row as unknown as {
+        id: string
+        name: string
+        email: string
+        teacher_status: TeacherApplicant['teacher_status']
+        teacher_profile:
+          | TeacherApplicant['teacher_profile']
+          | TeacherApplicant['teacher_profile'][]
+          | null
+      }
+      const tp = Array.isArray(r.teacher_profile)
+        ? r.teacher_profile[0] ?? null
+        : r.teacher_profile ?? null
+      return {
+        id: r.id,
+        name: r.name,
+        email: r.email,
+        teacher_status: r.teacher_status,
+        teacher_profile: tp,
+      } as TeacherApplicant
+    })
+    setTeacherApplicants(shaped)
+    setLoadingTeachers(false)
   }, [])
 
   const fetchMaterials = useCallback(async () => {
@@ -144,8 +196,13 @@ export default function AdminDashboardPage() {
   }, [])
 
   const fetchAll = useCallback(async () => {
-    await Promise.all([fetchLeaders(), fetchMaterials(), fetchEvents()])
-  }, [fetchLeaders, fetchMaterials, fetchEvents])
+    await Promise.all([
+      fetchLeaders(),
+      fetchTeachers(),
+      fetchMaterials(),
+      fetchEvents(),
+    ])
+  }, [fetchLeaders, fetchTeachers, fetchMaterials, fetchEvents])
 
   useEffect(() => {
     fetchAll()
@@ -182,6 +239,50 @@ export default function AdminDashboardPage() {
       await fetchLeaders()
     } catch (err) {
       console.error('Reject leader failed:', err)
+      alert(`반려 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setItemBusy(a.id, false)
+    }
+  }
+
+  const approveTeacher = async (a: TeacherApplicant) => {
+    setItemBusy(a.id, true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('users')
+        .update({ role: 'teacher', teacher_status: 'approved' })
+        .eq('id', a.id)
+      if (error) throw error
+      await fetchTeachers()
+    } catch (err) {
+      console.error('Approve teacher failed:', err)
+      alert(`승인 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setItemBusy(a.id, false)
+    }
+  }
+
+  const rejectTeacher = async (a: TeacherApplicant) => {
+    if (!confirm(`${a.name} 님의 선생님 신청을 반려할까요?`)) return
+    setItemBusy(a.id, true)
+    try {
+      const supabase = createClient()
+      const { error: uErr } = await supabase
+        .from('users')
+        .update({ teacher_status: 'rejected', role: 'student' })
+        .eq('id', a.id)
+      if (uErr) throw uErr
+      if (a.teacher_profile?.id) {
+        const { error: tErr } = await supabase
+          .from('teachers')
+          .delete()
+          .eq('id', a.teacher_profile.id)
+        if (tErr) throw tErr
+      }
+      await fetchTeachers()
+    } catch (err) {
+      console.error('Reject teacher failed:', err)
       alert(`반려 실패: ${getErrorMessage(err)}`)
     } finally {
       setItemBusy(a.id, false)
@@ -278,29 +379,29 @@ export default function AdminDashboardPage() {
       </div>
 
       <Tabs defaultValue="leaders">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-4">
           <TabsTrigger value="leaders">
             <span className="flex items-center gap-1.5">
-              반장 승인
-              <span className="rounded-full bg-red-100 px-1.5 text-[10px] font-semibold text-red-700">
-                {leaders.length}
-              </span>
+              반장
+              <CountBadge n={leaders.length} />
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="teachers">
+            <span className="flex items-center gap-1.5">
+              선생님
+              <CountBadge n={teacherApplicants.length} />
             </span>
           </TabsTrigger>
           <TabsTrigger value="materials">
             <span className="flex items-center gap-1.5">
-              자료 승인
-              <span className="rounded-full bg-red-100 px-1.5 text-[10px] font-semibold text-red-700">
-                {materials.length}
-              </span>
+              자료
+              <CountBadge n={materials.length} />
             </span>
           </TabsTrigger>
           <TabsTrigger value="events">
             <span className="flex items-center gap-1.5">
-              공지 승인
-              <span className="rounded-full bg-red-100 px-1.5 text-[10px] font-semibold text-red-700">
-                {events.length}
-              </span>
+              공지
+              <CountBadge n={events.length} />
             </span>
           </TabsTrigger>
         </TabsList>
@@ -342,6 +443,72 @@ export default function AdminDashboardPage() {
                       size="sm"
                       variant="outline"
                       onClick={() => rejectLeader(a)}
+                      disabled={busy[a.id]}
+                    >
+                      <XIcon />
+                      <span className="ml-1">반려</span>
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+            ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="teachers" className="space-y-2">
+          {loadingTeachers ? (
+            <LoadingState />
+          ) : teacherApplicants.length === 0 ? (
+            <EmptyState message="선생님 승인 대기 신청이 없어요" />
+          ) : (
+            teacherApplicants.map((a) => (
+              <Card key={a.id} size="sm" className="px-3 py-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <UserIcon className="h-4 w-4 text-purple-500" />
+                      <span className="font-semibold text-slate-900">
+                        {a.name}
+                      </span>
+                      <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">
+                        선생님 신청
+                      </Badge>
+                    </div>
+                    <div className="mt-0.5 text-xs text-slate-500">
+                      {a.email}
+                    </div>
+                    {a.teacher_profile && (
+                      <div className="mt-1.5 space-y-0.5 rounded-md bg-purple-50 px-2 py-1.5 text-xs text-slate-700">
+                        <div>
+                          <strong className="font-semibold">과목:</strong>{' '}
+                          {a.teacher_profile.subject}
+                        </div>
+                        <div>
+                          <strong className="font-semibold">담당 학년:</strong>{' '}
+                          {a.teacher_profile.managed_grades
+                            ?.map((g) => `${g}학년`)
+                            .join(', ') || '없음'}
+                        </div>
+                        <div>
+                          <strong className="font-semibold">연구실:</strong>{' '}
+                          {a.teacher_profile.office_location || '미입력'}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Button
+                      size="sm"
+                      onClick={() => approveTeacher(a)}
+                      disabled={busy[a.id]}
+                    >
+                      <CheckIcon />
+                      <span className="ml-1">승인</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => rejectTeacher(a)}
                       disabled={busy[a.id]}
                     >
                       <XIcon />
@@ -474,6 +641,20 @@ export default function AdminDashboardPage() {
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+function CountBadge({ n }: { n: number }) {
+  return (
+    <span
+      className={
+        n > 0
+          ? 'rounded-full bg-red-100 px-1.5 text-[10px] font-semibold text-red-700'
+          : 'rounded-full bg-slate-100 px-1.5 text-[10px] font-semibold text-slate-500'
+      }
+    >
+      {n}
+    </span>
   )
 }
 

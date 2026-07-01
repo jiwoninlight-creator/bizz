@@ -102,8 +102,9 @@ const LIST_CATEGORY_LABELS: Record<EventType, string> = {
 
 const SCOPE_META: Record<EventScope, { label: string; hint: string }> = {
   personal: { label: '나만 보기', hint: '내 캘린더에만 표시' },
-  class: { label: '우리 반 공지', hint: '반 전체에 공유 (관리자 승인)' },
-  grade: { label: '학년 전체 공지', hint: '학년 전체에 공유 (관리자 승인)' },
+  class: { label: '반 공지', hint: '해당 반 전체에 공유' },
+  grade: { label: '학년 전체 공지', hint: '학년 전체에 공유' },
+  schoolwide: { label: '전교 공지', hint: '전교생에게 공유 (관리자/선생님)' },
 }
 
 function toDateKey(d: Date): string {
@@ -214,6 +215,7 @@ export default function CalendarPage() {
     loading: userLoading,
     isAdmin,
     isClassLeader,
+    isTeacher,
   } = useUser()
 
   const [view, setView] = useState<ViewMode>('calendar')
@@ -247,6 +249,15 @@ export default function CalendarPage() {
   const [formEndTime, setFormEndTime] = useState('')
   const [formMemo, setFormMemo] = useState('')
   const [formScope, setFormScope] = useState<LeaderChoiceScope>('personal')
+  const [formTargetGrade, setFormTargetGrade] = useState<string>('')
+  const [formTargetClasses, setFormTargetClasses] = useState<number[]>([])
+
+  // Teacher metadata for notice badges + form defaults
+  const [teacherUserIds, setTeacherUserIds] = useState<Set<string>>(new Set())
+  const [teacherNames, setTeacherNames] = useState<Map<string, string>>(
+    new Map()
+  )
+  const [myTeacherGrades, setMyTeacherGrades] = useState<number[]>([])
 
   // Memo edit
   const [memoEditing, setMemoEditing] = useState(false)
@@ -266,6 +277,7 @@ export default function CalendarPage() {
     const endKey = toDateKey(gridEnd)
 
     const conds: string[] = [`user_id.eq.${user.id}`]
+    conds.push(`and(scope.eq.schoolwide,approval_status.eq.approved)`)
     if (profile?.grade) {
       conds.push(
         `and(scope.eq.grade,grade.eq.${profile.grade},approval_status.eq.approved)`
@@ -329,6 +341,36 @@ export default function CalendarPage() {
   useEffect(() => {
     fetchAll()
   }, [fetchAll])
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase
+      .from('users')
+      .select('id, name')
+      .eq('role', 'teacher')
+      .eq('teacher_status', 'approved')
+      .then(({ data }) => {
+        const rows = (data ?? []) as { id: string; name: string }[]
+        setTeacherUserIds(new Set(rows.map((r) => r.id)))
+        setTeacherNames(new Map(rows.map((r) => [r.id, r.name])))
+      })
+  }, [])
+
+  useEffect(() => {
+    if (!isTeacher || !user?.id) {
+      setMyTeacherGrades([])
+      return
+    }
+    const supabase = createClient()
+    supabase
+      .from('teachers')
+      .select('managed_grades')
+      .eq('user_id', user.id)
+      .maybeSingle<{ managed_grades: number[] | null }>()
+      .then(({ data }) => {
+        setMyTeacherGrades(data?.managed_grades ?? [])
+      })
+  }, [isTeacher, user?.id])
 
   // Reminder / notification
   const notifiedRef = useRef<Set<string>>(new Set())
@@ -498,6 +540,10 @@ export default function CalendarPage() {
     setFormEndTime('')
     setFormMemo('')
     setFormScope('personal')
+    setFormTargetGrade(profile?.grade ? String(profile.grade) : '')
+    setFormTargetClasses(
+      profile?.class_number ? [profile.class_number] : []
+    )
     setDialogOpen(true)
   }
 
@@ -527,6 +573,8 @@ export default function CalendarPage() {
     }
     setFormMemo(event.memo ?? '')
     setFormScope(event.scope)
+    setFormTargetGrade(event.grade ? String(event.grade) : '')
+    setFormTargetClasses(event.class_number ? [event.class_number] : [])
     setDialogOpen(true)
   }
 
@@ -564,12 +612,14 @@ export default function CalendarPage() {
 
   const scopeAvailable = (s: EventScope): boolean => {
     if (s === 'personal') return true
+    if (s === 'schoolwide') return isAdmin || isTeacher
+    if (isAdmin || isTeacher) return true
     if (!profile?.grade) return false
     if (s === 'class') return !!profile.class_number
     return true
   }
 
-  const buildEventPayload = () => {
+  const buildTimeFields = () => {
     let period: string | null = null
     let start: string | null = null
     let end: string | null = null
@@ -582,43 +632,76 @@ export default function CalendarPage() {
       start = p?.start ?? null
       end = p?.end ?? null
     }
+    return { period, start, end }
+  }
 
-    let approval: 'approved' | 'pending' = 'approved'
-    let gradeVal: number | null = null
-    let classVal: number | null = null
-
-    if (formScope === 'personal') {
-      approval = 'approved'
-    } else if (formScope === 'class') {
-      gradeVal = profile?.grade ?? null
-      classVal = profile?.class_number ?? null
-      if (isAdmin) approval = 'approved'
-      else if (
-        isClassLeader &&
-        gradeVal === profile?.grade &&
-        classVal === profile?.class_number
-      )
-        approval = 'approved'
-      else approval = 'pending'
-    } else if (formScope === 'grade') {
-      gradeVal = profile?.grade ?? null
-      if (isAdmin) approval = 'approved'
-      else approval = 'pending'
-    }
-
+  const commonPayloadBase = () => {
+    const { period, start, end } = buildTimeFields()
     return {
       title: formTitle.trim(),
       subject: formSubject.trim() || null,
       event_date: formDate,
       event_type: formType,
       memo: formMemo.trim() || null,
-      grade: gradeVal,
-      class_number: classVal,
       period,
       start_time: start,
       end_time: end,
+    }
+  }
+
+  const approvalForScope = (
+    s: EventScope,
+    grade: number | null,
+    classNumber: number | null
+  ): 'approved' | 'pending' => {
+    if (s === 'personal') return 'approved'
+    if (isAdmin || isTeacher) return 'approved'
+    if (
+      s === 'class' &&
+      isClassLeader &&
+      grade === profile?.grade &&
+      classNumber === profile?.class_number
+    ) {
+      return 'approved'
+    }
+    return 'pending'
+  }
+
+  const buildEventPayload = () => {
+    const base = commonPayloadBase()
+    let gradeVal: number | null = null
+    let classVal: number | null = null
+
+    if (formScope === 'personal') {
+      // no grade/class
+    } else if (formScope === 'schoolwide') {
+      // no grade/class
+    } else if (formScope === 'class') {
+      gradeVal =
+        isAdmin || isTeacher
+          ? formTargetGrade
+            ? Number(formTargetGrade)
+            : profile?.grade ?? null
+          : profile?.grade ?? null
+      classVal =
+        isAdmin || isTeacher
+          ? formTargetClasses[0] ?? null
+          : profile?.class_number ?? null
+    } else if (formScope === 'grade') {
+      gradeVal =
+        isAdmin || isTeacher
+          ? formTargetGrade
+            ? Number(formTargetGrade)
+            : profile?.grade ?? null
+          : profile?.grade ?? null
+    }
+
+    return {
+      ...base,
+      grade: gradeVal,
+      class_number: classVal,
       scope: formScope,
-      approval_status: approval,
+      approval_status: approvalForScope(formScope, gradeVal, classVal),
     }
   }
 
@@ -632,11 +715,29 @@ export default function CalendarPage() {
       const payload = buildEventPayload()
 
       if (formMode === 'add') {
-        const { error } = await supabase.from('events').insert({
-          user_id: user.id,
-          ...payload,
-        })
-        if (error) throw error
+        const multiClass =
+          (isAdmin || isTeacher) &&
+          formScope === 'class' &&
+          formTargetClasses.length > 1
+        if (multiClass) {
+          const gradeVal = formTargetGrade
+            ? Number(formTargetGrade)
+            : profile?.grade ?? null
+          const rows = formTargetClasses.map((cls) => ({
+            user_id: user.id,
+            ...payload,
+            grade: gradeVal,
+            class_number: cls,
+          }))
+          const { error } = await supabase.from('events').insert(rows)
+          if (error) throw error
+        } else {
+          const { error } = await supabase.from('events').insert({
+            user_id: user.id,
+            ...payload,
+          })
+          if (error) throw error
+        }
       } else if (formMode === 'edit' && editingEventId) {
         const { error } = await supabase
           .from('events')
@@ -783,7 +884,19 @@ export default function CalendarPage() {
     formTitle.trim().length > 0 &&
     formDate.length > 0 &&
     scopeAvailable(formScope) &&
-    !submitting
+    !submitting &&
+    // For teacher/admin picking class/grade scope, require a target grade
+    !(
+      (isAdmin || isTeacher) &&
+      (formScope === 'class' || formScope === 'grade') &&
+      !formTargetGrade
+    ) &&
+    // For teacher/admin picking class scope, require at least one class
+    !(
+      (isAdmin || isTeacher) &&
+      formScope === 'class' &&
+      formTargetClasses.length === 0
+    )
 
   const today = useMemo(() => startOfDay(new Date()), [])
   const monthTitle = `${currentMonth.getFullYear()}년 ${currentMonth.getMonth() + 1}월`
@@ -1009,6 +1122,12 @@ export default function CalendarPage() {
                     own={ev.user_id === user?.id}
                     canEdit={canEditEvent(ev)}
                     completed={isEventCompleted(ev)}
+                    teacherName={
+                      ev.scope !== 'personal' &&
+                      teacherUserIds.has(ev.user_id)
+                        ? teacherNames.get(ev.user_id)
+                        : undefined
+                    }
                     onDelete={() => handleDelete(ev.id)}
                     onEdit={() => openEditDialog(ev)}
                     onToggleDone={() => toggleCompletion(ev)}
@@ -1062,6 +1181,8 @@ export default function CalendarPage() {
                     currentUserId={user?.id}
                     isEventCompleted={isEventCompleted}
                     canEditEvent={canEditEvent}
+                    teacherUserIds={teacherUserIds}
+                    teacherNames={teacherNames}
                     onDelete={handleDelete}
                     onEdit={openEditDialog}
                     onToggleDone={toggleCompletion}
@@ -1208,7 +1329,16 @@ export default function CalendarPage() {
             <div className="space-y-1.5">
               <Label>범위</Label>
               <div className="grid grid-cols-1 gap-1.5">
-                {(['personal', 'class', 'grade'] as EventScope[]).map((s) => {
+                {(
+                  [
+                    'personal',
+                    'class',
+                    'grade',
+                    ...(isAdmin || isTeacher
+                      ? (['schoolwide'] as const)
+                      : []),
+                  ] as EventScope[]
+                ).map((s) => {
                   const available = scopeAvailable(s)
                   const active = formScope === s
                   return (
@@ -1246,15 +1376,83 @@ export default function CalendarPage() {
                   )
                 })}
               </div>
-              {formScope !== 'personal' && !isAdmin &&
-                !(
-                  isClassLeader &&
-                  formScope === 'class'
-                ) && (
+
+              {(isAdmin || isTeacher) &&
+                (formScope === 'class' || formScope === 'grade') && (
+                  <div className="space-y-2 rounded-lg bg-slate-50 p-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="target-grade" className="text-xs">
+                        대상 학년
+                      </Label>
+                      <Select
+                        value={formTargetGrade}
+                        onValueChange={setFormTargetGrade}
+                      >
+                        <SelectTrigger id="target-grade" className="h-8 w-full">
+                          <SelectValue placeholder="학년 선택" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {(isTeacher && myTeacherGrades.length > 0
+                            ? myTeacherGrades
+                            : [1, 2, 3]
+                          ).map((g) => (
+                            <SelectItem key={g} value={String(g)}>
+                              {g}학년
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {formScope === 'class' && (
+                      <div className="space-y-1">
+                        <Label className="text-xs">
+                          대상 반 (여러 개 선택 시 각 반에 등록)
+                        </Label>
+                        <div className="grid grid-cols-6 gap-1">
+                          {[1, 2, 3, 4, 5, 6].map((c) => {
+                            const on = formTargetClasses.includes(c)
+                            return (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() =>
+                                  setFormTargetClasses((prev) =>
+                                    prev.includes(c)
+                                      ? prev.filter((x) => x !== c)
+                                      : [...prev, c].sort()
+                                  )
+                                }
+                                className={cn(
+                                  'rounded-md py-1 text-xs font-medium transition-colors',
+                                  on
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-white text-slate-600 hover:bg-slate-100'
+                                )}
+                                aria-pressed={on}
+                              >
+                                {c}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+              {formScope !== 'personal' &&
+                !isAdmin &&
+                !isTeacher &&
+                !(isClassLeader && formScope === 'class') && (
                   <p className="text-[11px] text-amber-600">
                     공유 일정은 관리자 승인 후 다른 사람에게 보여요.
                   </p>
                 )}
+              {(isAdmin || isTeacher) && formScope !== 'personal' && (
+                <p className="text-[11px] text-emerald-700">
+                  {isAdmin ? '관리자' : '선생님'} 권한으로 즉시 공개돼요.
+                </p>
+              )}
             </div>
 
             <DialogFooter>
@@ -1388,18 +1586,34 @@ function MemoSection({
   )
 }
 
-function ScopeChip({ event }: { event: Event }) {
+function ScopeChip({
+  event,
+  teacherName,
+}: {
+  event: Event
+  teacherName?: string
+}) {
   if (event.scope === 'personal') return null
-  const label =
-    event.scope === 'class'
-      ? `${event.grade ?? '?'}학년 ${event.class_number ?? '?'}반 공지`
-      : `${event.grade ?? '?'}학년 공지`
+  let label: string
+  if (event.scope === 'class') {
+    label = `${event.grade ?? '?'}학년 ${event.class_number ?? '?'}반 공지`
+  } else if (event.scope === 'grade') {
+    label = `${event.grade ?? '?'}학년 공지`
+  } else {
+    label = '전교 공지'
+  }
+  const isTeacherNotice = !!teacherName
   return (
     <Badge
       variant="outline"
-      className="h-4 border-slate-300 bg-white/70 px-1.5 text-[10px] text-slate-600"
+      className={cn(
+        'h-4 px-1.5 text-[10px]',
+        isTeacherNotice
+          ? 'border-purple-300 bg-purple-50 text-purple-700'
+          : 'border-slate-300 bg-white/70 text-slate-600'
+      )}
     >
-      {label}
+      {isTeacherNotice ? `${teacherName} 선생님 공지` : label}
     </Badge>
   )
 }
@@ -1448,6 +1662,7 @@ function SelectedEventItem({
   own,
   canEdit,
   completed,
+  teacherName,
   onDelete,
   onEdit,
   onToggleDone,
@@ -1456,6 +1671,7 @@ function SelectedEventItem({
   own: boolean
   canEdit: boolean
   completed: boolean
+  teacherName?: string
   onDelete: () => void
   onEdit: () => void
   onToggleDone: () => void
@@ -1509,7 +1725,7 @@ function SelectedEventItem({
         </div>
         <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <TimeChip event={event} />
-          <ScopeChip event={event} />
+          <ScopeChip event={event} teacherName={teacherName} />
           <ApprovalChip event={event} />
         </div>
         {event.memo && (
@@ -1552,6 +1768,8 @@ function EventListSection({
   currentUserId,
   isEventCompleted,
   canEditEvent,
+  teacherUserIds,
+  teacherNames,
   onDelete,
   onEdit,
   onToggleDone,
@@ -1561,6 +1779,8 @@ function EventListSection({
   currentUserId?: string
   isEventCompleted: (e: Event) => boolean
   canEditEvent: (e: Event) => boolean
+  teacherUserIds: Set<string>
+  teacherNames: Map<string, string>
   onDelete: (id: string) => void
   onEdit: (e: Event) => void
   onToggleDone: (e: Event) => void
@@ -1581,6 +1801,11 @@ function EventListSection({
           own={e.user_id === currentUserId}
           completed={isEventCompleted(e)}
           canEdit={canEditEvent(e)}
+          teacherName={
+            e.scope !== 'personal' && teacherUserIds.has(e.user_id)
+              ? teacherNames.get(e.user_id)
+              : undefined
+          }
           onDelete={() => onDelete(e.id)}
           onEdit={() => onEdit(e)}
           onToggleDone={() => onToggleDone(e)}
@@ -1595,6 +1820,7 @@ function EventListItem({
   own,
   canEdit,
   completed,
+  teacherName,
   onDelete,
   onEdit,
   onToggleDone,
@@ -1603,6 +1829,7 @@ function EventListItem({
   own: boolean
   canEdit: boolean
   completed: boolean
+  teacherName?: string
   onDelete: () => void
   onEdit: () => void
   onToggleDone: () => void
@@ -1685,7 +1912,7 @@ function EventListItem({
           </p>
         )}
         <div className="mt-1.5 flex flex-wrap gap-1">
-          <ScopeChip event={event} />
+          <ScopeChip event={event} teacherName={teacherName} />
           <ApprovalChip event={event} />
         </div>
       </div>

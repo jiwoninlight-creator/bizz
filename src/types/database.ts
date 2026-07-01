@@ -1,6 +1,7 @@
 export type UserRole = 'student' | 'teacher' | 'admin' | 'class_leader'
 export type ClassLeaderType = 'leader' | 'vice_leader'
 export type ClassLeaderStatus = 'none' | 'pending' | 'approved' | 'rejected'
+export type TeacherApplicationStatus = 'none' | 'pending' | 'approved' | 'rejected'
 
 export type User = {
   id: string
@@ -11,6 +12,7 @@ export type User = {
   class_number: number | null
   class_leader_type: ClassLeaderType | null
   class_leader_status: ClassLeaderStatus
+  teacher_status: TeacherApplicationStatus
   onboarded: boolean
   avatar_url: string | null
   created_at: string
@@ -31,6 +33,9 @@ export type Teacher = {
   office_location: string
   photo_url: string | null
   current_status: TeacherStatus
+  is_self_registered: boolean
+  managed_grades: number[]
+  managed_classes: number[]
   updated_at: string
 }
 
@@ -45,7 +50,7 @@ export type TeacherSchedule = {
 }
 
 export type EventType = 'assignment' | 'exam' | 'personal'
-export type EventScope = 'personal' | 'class' | 'grade'
+export type EventScope = 'personal' | 'class' | 'grade' | 'schoolwide'
 export type EventApprovalStatus = 'approved' | 'pending' | 'rejected'
 
 export type Event = {
@@ -78,6 +83,8 @@ export type Material = {
   subject: string
   teacher_id: string | null
   grade: number
+  class_number: number | null
+  category: string | null
   file_url: string
   file_type: MaterialFileType
   file_size: number
