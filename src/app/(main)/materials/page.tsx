@@ -40,8 +40,21 @@ function getFileType(filename: string): MaterialFileType {
   return 'other'
 }
 
-function sanitizeFilename(name: string): string {
-  return name.replace(/[/\\?%*:|"<>]/g, '_')
+function sanitizeStorageFilename(name: string): string {
+  const lastDot = name.lastIndexOf('.')
+  const hasExt = lastDot > 0 && lastDot < name.length - 1
+  const rawBase = hasExt ? name.slice(0, lastDot) : name
+  const rawExt = hasExt ? name.slice(lastDot + 1) : ''
+
+  let safeBase = rawBase
+    .replace(/[^a-zA-Z0-9_-]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_+|_+$/g, '')
+  if (safeBase.length === 0) safeBase = 'file'
+
+  const safeExt = rawExt.toLowerCase().replace(/[^a-z0-9]/g, '')
+
+  return safeExt ? `${safeBase}.${safeExt}` : safeBase
 }
 
 export default function MaterialsPage() {
@@ -163,7 +176,7 @@ export default function MaterialsPage() {
     setSubmitting(true)
     try {
       const supabase = createClient()
-      const safeName = sanitizeFilename(formFile.name)
+      const safeName = sanitizeStorageFilename(formFile.name)
       const path = `${user.id}/${Date.now()}_${safeName}`
 
       const { error: uploadError } = await supabase.storage
