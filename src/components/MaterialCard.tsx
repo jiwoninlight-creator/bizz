@@ -7,6 +7,7 @@ import {
   ImageIcon,
   DownloadIcon,
   ExternalLinkIcon,
+  PencilIcon,
   Trash2Icon,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
@@ -123,6 +124,8 @@ type Props = {
   currentUserId?: string
   canDelete?: boolean
   onDelete?: (m: MaterialWithTeacher) => void
+  canEdit?: boolean
+  onEdit?: (m: MaterialWithTeacher) => void
   compact?: boolean
 }
 
@@ -131,6 +134,8 @@ export default function MaterialCard({
   currentUserId,
   canDelete,
   onDelete,
+  canEdit,
+  onEdit,
   compact,
 }: Props) {
   const style = FILE_TYPE_STYLES[material.file_type] ?? FILE_TYPE_STYLES.other
@@ -154,6 +159,11 @@ export default function MaterialCard({
   const handleDeleteClick = (e: MouseEvent) => {
     e.stopPropagation()
     onDelete?.(material)
+  }
+
+  const handleEditClick = (e: MouseEvent) => {
+    e.stopPropagation()
+    onEdit?.(material)
   }
 
   return (
@@ -189,6 +199,17 @@ export default function MaterialCard({
                 <Badge className="h-5 rounded-md border border-amber-200 bg-amber-50 px-1.5 text-[10px] font-medium text-amber-700 hover:bg-amber-50">
                   대기
                 </Badge>
+              )}
+              {canEdit && onEdit && (
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  className="text-zinc-400 hover:bg-zinc-100 hover:text-indigo-600"
+                  onClick={handleEditClick}
+                  aria-label="자료 수정"
+                >
+                  <PencilIcon />
+                </Button>
               )}
               {canDelete && onDelete && (
                 <Button

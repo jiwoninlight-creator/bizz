@@ -2,9 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import {
+  ArrowRightIcon,
   CheckIcon,
   ExternalLinkIcon,
   Loader2Icon,
+  PencilIcon,
   UserIcon,
   XIcon,
 } from 'lucide-react'
@@ -21,6 +23,23 @@ import type {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Tabs,
   TabsContent,
@@ -56,6 +75,36 @@ type PendingMaterial = Material & {
 type PendingEvent = Event & {
   author: Pick<User, 'id' | 'name' | 'email'> | null
 }
+
+type ProfileChangeApplicant = Pick<
+  User,
+  | 'id'
+  | 'name'
+  | 'email'
+  | 'grade'
+  | 'class_number'
+  | 'pending_grade'
+  | 'pending_class_number'
+  | 'profile_change_status'
+>
+
+const SUBJECT_OPTIONS = [
+  '국어',
+  '영어',
+  '수학',
+  '과학',
+  '사회',
+  '역사',
+  '기타',
+] as const
+
+const CATEGORY_OPTIONS = [
+  '수업자료',
+  '교과서',
+  '시험지',
+  '참고자료',
+  '기타',
+] as const
 
 function LeaderTypeChip({ type }: { type: ClassLeaderType | null }) {
   if (!type) return null
@@ -115,12 +164,20 @@ export default function AdminDashboardPage() {
   )
   const [materials, setMaterials] = useState<PendingMaterial[]>([])
   const [events, setEvents] = useState<PendingEvent[]>([])
+  const [profileChanges, setProfileChanges] = useState<ProfileChangeApplicant[]>(
+    []
+  )
 
   const [loadingLeaders, setLoadingLeaders] = useState(true)
   const [loadingTeachers, setLoadingTeachers] = useState(true)
   const [loadingMaterials, setLoadingMaterials] = useState(true)
   const [loadingEvents, setLoadingEvents] = useState(true)
+  const [loadingProfileChanges, setLoadingProfileChanges] = useState(true)
   const [busy, setBusy] = useState<Record<string, boolean>>({})
+
+  const [editingMaterial, setEditingMaterial] = useState<PendingMaterial | null>(
+    null
+  )
 
   const setItemBusy = (id: string, v: boolean) =>
     setBusy((b) => ({ ...b, [id]: v }))
@@ -148,7 +205,7 @@ export default function AdminDashboardPage() {
       .select(
         'id, name, email, teacher_status, teacher_profile:teachers!user_id(id, subject, office_location, managed_grades)'
       )
-      .eq('teacher_status', 'pending')
+      .in('teacher_status', ['pending', 'pending_downgrade'])
       .order('created_at', { ascending: true })
     if (error) console.error(error)
     const shaped = (data ?? []).map((row) => {
@@ -204,14 +261,36 @@ export default function AdminDashboardPage() {
     setLoadingEvents(false)
   }, [])
 
+  const fetchProfileChanges = useCallback(async () => {
+    setLoadingProfileChanges(true)
+    const supabase = createClient()
+    const { data, error } = await supabase
+      .from('users')
+      .select(
+        'id, name, email, grade, class_number, pending_grade, pending_class_number, profile_change_status'
+      )
+      .eq('profile_change_status', 'pending')
+      .order('created_at', { ascending: true })
+    if (error) console.error(error)
+    setProfileChanges((data ?? []) as ProfileChangeApplicant[])
+    setLoadingProfileChanges(false)
+  }, [])
+
   const fetchAll = useCallback(async () => {
     await Promise.all([
       fetchLeaders(),
       fetchTeachers(),
       fetchMaterials(),
       fetchEvents(),
+      fetchProfileChanges(),
     ])
-  }, [fetchLeaders, fetchTeachers, fetchMaterials, fetchEvents])
+  }, [
+    fetchLeaders,
+    fetchTeachers,
+    fetchMaterials,
+    fetchEvents,
+    fetchProfileChanges,
+  ])
 
   useEffect(() => {
     fetchAll()
@@ -255,14 +334,38 @@ export default function AdminDashboardPage() {
   }
 
   const approveTeacher = async (a: TeacherApplicant) => {
+    const isDowngrade = a.teacher_status === 'pending_downgrade'
+    if (isDowngrade) {
+      if (
+        !confirm(
+          `${a.name} 님을 학생 계정으로 전환할까요?\n\n선생님 정보(자료·시간표 등)는 익명 형태로 유지되며 계정 연결만 해제됩니다.`
+        )
+      )
+        return
+    }
     setItemBusy(a.id, true)
     try {
       const supabase = createClient()
-      const { error } = await supabase
-        .from('users')
-        .update({ role: 'teacher', teacher_status: 'approved' })
-        .eq('id', a.id)
-      if (error) throw error
+      if (isDowngrade) {
+        const { error } = await supabase
+          .from('users')
+          .update({ role: 'student', teacher_status: 'none' })
+          .eq('id', a.id)
+        if (error) throw error
+        if (a.teacher_profile?.id) {
+          const { error: tErr } = await supabase
+            .from('teachers')
+            .update({ user_id: null })
+            .eq('id', a.teacher_profile.id)
+          if (tErr) throw tErr
+        }
+      } else {
+        const { error } = await supabase
+          .from('users')
+          .update({ role: 'teacher', teacher_status: 'approved' })
+          .eq('id', a.id)
+        if (error) throw error
+      }
       await fetchTeachers()
     } catch (err) {
       console.error('Approve teacher failed:', err)
@@ -273,25 +376,85 @@ export default function AdminDashboardPage() {
   }
 
   const rejectTeacher = async (a: TeacherApplicant) => {
-    if (!confirm(`${a.name} 님의 선생님 신청을 반려할까요?`)) return
+    const isDowngrade = a.teacher_status === 'pending_downgrade'
+    const msg = isDowngrade
+      ? `${a.name} 님의 학생 전환 요청을 반려할까요?`
+      : `${a.name} 님의 선생님 신청을 반려할까요?`
+    if (!confirm(msg)) return
     setItemBusy(a.id, true)
     try {
       const supabase = createClient()
-      const { error: uErr } = await supabase
-        .from('users')
-        .update({ teacher_status: 'rejected', role: 'student' })
-        .eq('id', a.id)
-      if (uErr) throw uErr
-      if (a.teacher_profile?.id) {
-        const { error: tErr } = await supabase
-          .from('teachers')
-          .delete()
-          .eq('id', a.teacher_profile.id)
-        if (tErr) throw tErr
+      if (isDowngrade) {
+        // 반려 = 요청 취소. 선생님 상태로 복귀.
+        const { error } = await supabase
+          .from('users')
+          .update({ teacher_status: 'approved' })
+          .eq('id', a.id)
+        if (error) throw error
+      } else {
+        const { error: uErr } = await supabase
+          .from('users')
+          .update({ teacher_status: 'rejected', role: 'student' })
+          .eq('id', a.id)
+        if (uErr) throw uErr
+        if (a.teacher_profile?.id) {
+          const { error: tErr } = await supabase
+            .from('teachers')
+            .delete()
+            .eq('id', a.teacher_profile.id)
+          if (tErr) throw tErr
+        }
       }
       await fetchTeachers()
     } catch (err) {
       console.error('Reject teacher failed:', err)
+      alert(`반려 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setItemBusy(a.id, false)
+    }
+  }
+
+  const approveProfileChange = async (a: ProfileChangeApplicant) => {
+    setItemBusy(a.id, true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('users')
+        .update({
+          grade: a.pending_grade ?? a.grade,
+          class_number: a.pending_class_number ?? a.class_number,
+          pending_grade: null,
+          pending_class_number: null,
+          profile_change_status: 'none',
+        })
+        .eq('id', a.id)
+      if (error) throw error
+      await fetchProfileChanges()
+    } catch (err) {
+      console.error('Approve profile change failed:', err)
+      alert(`승인 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setItemBusy(a.id, false)
+    }
+  }
+
+  const rejectProfileChange = async (a: ProfileChangeApplicant) => {
+    if (!confirm(`${a.name} 님의 정보 변경 요청을 반려할까요?`)) return
+    setItemBusy(a.id, true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('users')
+        .update({
+          pending_grade: null,
+          pending_class_number: null,
+          profile_change_status: 'rejected',
+        })
+        .eq('id', a.id)
+      if (error) throw error
+      await fetchProfileChanges()
+    } catch (err) {
+      console.error('Reject profile change failed:', err)
       alert(`반려 실패: ${getErrorMessage(err)}`)
     } finally {
       setItemBusy(a.id, false)
@@ -388,7 +551,7 @@ export default function AdminDashboardPage() {
       </div>
 
       <Tabs defaultValue="leaders">
-        <TabsList className="grid w-full grid-cols-2 gap-1 sm:grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3 gap-1 sm:grid-cols-5">
           <TabsTrigger value="leaders">
             <span className="flex items-center gap-1.5">
               반장
@@ -399,6 +562,12 @@ export default function AdminDashboardPage() {
             <span className="flex items-center gap-1.5">
               선생님
               <CountBadge n={teacherApplicants.length} />
+            </span>
+          </TabsTrigger>
+          <TabsTrigger value="profile-changes">
+            <span className="flex items-center gap-1.5">
+              정보 변경
+              <CountBadge n={profileChanges.length} />
             </span>
           </TabsTrigger>
           <TabsTrigger value="materials">
@@ -470,63 +639,148 @@ export default function AdminDashboardPage() {
           ) : teacherApplicants.length === 0 ? (
             <EmptyState message="선생님 승인 대기 신청이 없어요" />
           ) : (
-            teacherApplicants.map((a) => (
-              <Card key={a.id} size="sm" className="px-3 py-3">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <UserIcon className="h-4 w-4 text-indigo-500" />
-                      <span className="font-semibold text-zinc-900">
-                        {a.name}
-                      </span>
-                      <span className="inline-flex h-5 items-center rounded-md border border-indigo-200 bg-indigo-50 px-1.5 text-[11px] font-medium text-indigo-700">
-                        선생님 신청
-                      </span>
-                    </div>
-                    <div className="mt-0.5 text-xs text-zinc-500">
-                      {a.email}
-                    </div>
-                    {a.teacher_profile && (
-                      <div className="mt-1.5 space-y-0.5 rounded-md border border-indigo-100 bg-indigo-50 px-2 py-1.5 text-xs text-zinc-700">
-                        <div>
-                          <strong className="font-semibold">과목:</strong>{' '}
-                          {a.teacher_profile.subject}
-                        </div>
-                        <div>
-                          <strong className="font-semibold">담당 학년:</strong>{' '}
-                          {a.teacher_profile.managed_grades
-                            ?.map((g) => `${g}학년`)
-                            .join(', ') || '없음'}
-                        </div>
-                        <div>
-                          <strong className="font-semibold">연구실:</strong>{' '}
-                          {a.teacher_profile.office_location || '미입력'}
-                        </div>
+            teacherApplicants.map((a) => {
+              const isDowngrade = a.teacher_status === 'pending_downgrade'
+              return (
+                <Card key={a.id} size="sm" className="px-3 py-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <UserIcon
+                          className={
+                            isDowngrade
+                              ? 'h-4 w-4 text-amber-500'
+                              : 'h-4 w-4 text-indigo-500'
+                          }
+                        />
+                        <span className="font-semibold text-zinc-900">
+                          {a.name}
+                        </span>
+                        {isDowngrade ? (
+                          <span className="inline-flex h-5 items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 text-[11px] font-medium text-amber-700">
+                            학생 전환
+                          </span>
+                        ) : (
+                          <span className="inline-flex h-5 items-center rounded-md border border-indigo-200 bg-indigo-50 px-1.5 text-[11px] font-medium text-indigo-700">
+                            선생님 신청
+                          </span>
+                        )}
                       </div>
-                    )}
+                      <div className="mt-0.5 text-xs text-zinc-500">
+                        {a.email}
+                      </div>
+                      {a.teacher_profile && !isDowngrade && (
+                        <div className="mt-1.5 space-y-0.5 rounded-md border border-indigo-100 bg-indigo-50 px-2 py-1.5 text-xs text-zinc-700">
+                          <div>
+                            <strong className="font-semibold">과목:</strong>{' '}
+                            {a.teacher_profile.subject}
+                          </div>
+                          <div>
+                            <strong className="font-semibold">
+                              담당 학년:
+                            </strong>{' '}
+                            {a.teacher_profile.managed_grades
+                              ?.map((g) => `${g}학년`)
+                              .join(', ') || '없음'}
+                          </div>
+                          <div>
+                            <strong className="font-semibold">연구실:</strong>{' '}
+                            {a.teacher_profile.office_location || '미입력'}
+                          </div>
+                        </div>
+                      )}
+                      {isDowngrade && (
+                        <div className="mt-1.5 rounded-md border border-amber-100 bg-amber-50 px-2 py-1.5 text-xs text-amber-800">
+                          선생님 → 학생 계정 전환 요청. 승인 시 자료 등록 및
+                          공지 권한이 해제되고, 등록된 선생님 프로필의 계정
+                          연결만 해제돼요.
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Button
+                        size="sm"
+                        onClick={() => approveTeacher(a)}
+                        disabled={busy[a.id]}
+                      >
+                        <CheckIcon />
+                        <span className="ml-1">승인</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => rejectTeacher(a)}
+                        disabled={busy[a.id]}
+                      >
+                        <XIcon />
+                        <span className="ml-1">반려</span>
+                      </Button>
+                    </div>
                   </div>
-                  <div className="flex gap-1.5">
-                    <Button
-                      size="sm"
-                      onClick={() => approveTeacher(a)}
-                      disabled={busy[a.id]}
-                    >
-                      <CheckIcon />
-                      <span className="ml-1">승인</span>
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => rejectTeacher(a)}
-                      disabled={busy[a.id]}
-                    >
-                      <XIcon />
-                      <span className="ml-1">반려</span>
-                    </Button>
+                </Card>
+              )
+            })
+          )}
+        </TabsContent>
+
+        <TabsContent value="profile-changes" className="space-y-2">
+          {loadingProfileChanges ? (
+            <LoadingState />
+          ) : profileChanges.length === 0 ? (
+            <EmptyState message="정보 변경 요청이 없어요" />
+          ) : (
+            profileChanges.map((a) => {
+              const before = `${a.grade ?? '?'}학년 ${a.class_number ?? '?'}반`
+              const after = `${a.pending_grade ?? a.grade ?? '?'}학년 ${a.pending_class_number ?? a.class_number ?? '?'}반`
+              return (
+                <Card key={a.id} size="sm" className="px-3 py-3">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <UserIcon className="h-4 w-4 text-zinc-400" />
+                        <span className="font-semibold text-zinc-900">
+                          {a.name}
+                        </span>
+                        <span className="inline-flex h-5 items-center rounded-md border border-amber-200 bg-amber-50 px-1.5 text-[11px] font-medium text-amber-700">
+                          정보 변경
+                        </span>
+                      </div>
+                      <div className="mt-0.5 text-xs text-zinc-500">
+                        {a.email}
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-zinc-700">
+                        <span className="rounded-md border border-zinc-200 bg-white px-1.5 py-0.5 text-zinc-600">
+                          현재: {before}
+                        </span>
+                        <ArrowRightIcon className="h-3 w-3 text-zinc-400" />
+                        <span className="rounded-md border border-amber-200 bg-amber-50 px-1.5 py-0.5 font-semibold text-amber-800">
+                          요청: {after}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Button
+                        size="sm"
+                        onClick={() => approveProfileChange(a)}
+                        disabled={busy[a.id]}
+                      >
+                        <CheckIcon />
+                        <span className="ml-1">승인</span>
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => rejectProfileChange(a)}
+                        disabled={busy[a.id]}
+                      >
+                        <XIcon />
+                        <span className="ml-1">반려</span>
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </Card>
-            ))
+                </Card>
+              )
+            })
           )}
         </TabsContent>
 
@@ -576,6 +830,15 @@ export default function AdminDashboardPage() {
                     >
                       <CheckIcon />
                       <span className="ml-1">승인</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setEditingMaterial(m)}
+                      disabled={busy[m.id]}
+                    >
+                      <PencilIcon />
+                      <span className="ml-1">수정</span>
                     </Button>
                     <Button
                       size="sm"
@@ -649,7 +912,229 @@ export default function AdminDashboardPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <MaterialEditDialog
+        material={editingMaterial}
+        onOpenChange={(v) => {
+          if (!v) setEditingMaterial(null)
+        }}
+        onSaved={async () => {
+          setEditingMaterial(null)
+          await fetchMaterials()
+        }}
+      />
     </div>
+  )
+}
+
+/* ------------------------ Material edit dialog --------------------------- */
+
+type MaterialEditDialogProps = {
+  material: PendingMaterial | null
+  onOpenChange: (open: boolean) => void
+  onSaved: () => Promise<void> | void
+}
+
+function MaterialEditDialog({
+  material,
+  onOpenChange,
+  onSaved,
+}: MaterialEditDialogProps) {
+  const [title, setTitle] = useState('')
+  const [subject, setSubject] = useState('')
+  const [teacherId, setTeacherId] = useState('')
+  const [grade, setGrade] = useState('')
+  const [classNumber, setClassNumber] = useState('')
+  const [category, setCategory] = useState('')
+  const [teachers, setTeachers] = useState<Pick<Teacher, 'id' | 'name' | 'subject'>[]>(
+    []
+  )
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!material) return
+    setTitle(material.title)
+    setSubject(material.subject)
+    setTeacherId(material.teacher_id ?? '')
+    setGrade(String(material.grade))
+    setClassNumber(material.class_number ? String(material.class_number) : '')
+    setCategory(material.category ?? '')
+  }, [material])
+
+  useEffect(() => {
+    if (!material) return
+    const supabase = createClient()
+    supabase
+      .from('teachers')
+      .select('id, name, subject')
+      .order('name', { ascending: true })
+      .then(({ data }) => {
+        setTeachers((data ?? []) as Pick<Teacher, 'id' | 'name' | 'subject'>[])
+      })
+  }, [material])
+
+  if (!material) return null
+
+  const save = async () => {
+    if (!title.trim()) {
+      alert('제목을 입력해주세요.')
+      return
+    }
+    if (!subject || !grade) {
+      alert('과목과 학년을 선택해주세요.')
+      return
+    }
+    setSaving(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('materials')
+        .update({
+          title: title.trim(),
+          subject,
+          teacher_id: teacherId || null,
+          grade: Number(grade),
+          class_number: classNumber ? Number(classNumber) : null,
+          category: category || null,
+        })
+        .eq('id', material.id)
+      if (error) throw error
+      await onSaved()
+    } catch (err) {
+      console.error('material edit failed:', err)
+      alert(`저장 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={!!material} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>자료 수정</DialogTitle>
+          <DialogDescription>
+            제목·과목·선생님·학년·반·카테고리를 수정할 수 있어요.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="me-title">제목</Label>
+            <Input
+              id="me-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="me-subject">과목</Label>
+              <Select value={subject} onValueChange={setSubject}>
+                <SelectTrigger id="me-subject" className="h-9 w-full">
+                  <SelectValue placeholder="선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUBJECT_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="me-category">카테고리</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger id="me-category" className="h-9 w-full">
+                  <SelectValue placeholder="선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORY_OPTIONS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="me-grade">학년</Label>
+              <Select value={grade} onValueChange={setGrade}>
+                <SelectTrigger id="me-grade" className="h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3].map((g) => (
+                    <SelectItem key={g} value={String(g)}>
+                      {g}학년
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="me-class">공개 범위 (반)</Label>
+              <Select
+                value={classNumber || 'all'}
+                onValueChange={(v) => setClassNumber(v === 'all' ? '' : v)}
+              >
+                <SelectTrigger id="me-class" className="h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">학년 전체</SelectItem>
+                  {[1, 2, 3, 4, 5, 6].map((c) => (
+                    <SelectItem key={c} value={String(c)}>
+                      {c}반
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="me-teacher">선생님 (선택)</Label>
+            <Select
+              value={teacherId || 'none'}
+              onValueChange={(v) => setTeacherId(v === 'none' ? '' : v)}
+            >
+              <SelectTrigger id="me-teacher" className="h-9 w-full">
+                <SelectValue placeholder="선생님" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">공통 · 교과서</SelectItem>
+                {teachers.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name} · {t.subject}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
+            취소
+          </Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? (
+              <>
+                <Loader2Icon className="h-4 w-4 animate-spin" />
+                <span className="ml-1.5">저장 중…</span>
+              </>
+            ) : (
+              '저장'
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

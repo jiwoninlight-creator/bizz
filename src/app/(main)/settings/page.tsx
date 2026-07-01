@@ -1,22 +1,26 @@
 'use client'
 
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import {
+  AlertTriangleIcon,
+  ArrowRightIcon,
   CheckCircle2Icon,
   ClockIcon,
   GraduationCapIcon,
   Loader2Icon,
-  PencilIcon,
   PlusIcon,
   SaveIcon,
   ShieldIcon,
   Trash2Icon,
+  UserMinusIcon,
   XCircleIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase-client'
 import { useUser } from '@/hooks/useUser'
 import { CLASS_OPTIONS } from '@/lib/school-schedule'
+import { isNonStudentEmail } from '@/lib/grade-utils'
 import type {
   ClassLeaderType,
   Teacher,
@@ -43,13 +47,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 
 const TEACHER_SUBJECTS = [
   '국어',
@@ -88,8 +85,9 @@ export default function SettingsPage() {
   const [schedules, setSchedules] = useState<TeacherSchedule[]>([])
   const [teacherLoading, setTeacherLoading] = useState(false)
 
-  const isApprovedTeacher =
-    profile?.role === 'teacher' && profile?.teacher_status === 'approved'
+  const isTeacherRole = profile?.role === 'teacher'
+  const isPendingTeacher =
+    profile?.role === 'teacher' && profile?.teacher_status === 'pending'
 
   const fetchTeacher = useCallback(async () => {
     if (!user?.id) return
@@ -147,17 +145,19 @@ export default function SettingsPage() {
 
       <RoleCard profile={profile} refresh={refresh} />
 
-      {isApprovedTeacher && (
+      {isTeacherRole && (
         <TeacherProfileCard
           user={user}
           profile={profile}
           teacher={teacher}
           loading={teacherLoading}
+          isPending={isPendingTeacher}
+          refresh={refresh}
           onUpdated={fetchTeacher}
         />
       )}
 
-      {isApprovedTeacher && teacher && (
+      {isTeacherRole && teacher && (
         <TeacherScheduleCard
           teacherId={teacher.id}
           schedules={schedules}
@@ -174,6 +174,8 @@ export default function SettingsPage() {
           onUpdated={fetchTeacher}
         />
       )}
+
+      <DangerZoneCard user={user} profile={profile} />
     </div>
   )
 }
@@ -190,51 +192,41 @@ function ProfileInfoCard({
   refresh: Refresh
 }) {
   const [name, setName] = useState(profile.name)
-  const [classNumber, setClassNumber] = useState<string>(
-    profile.class_number ? String(profile.class_number) : ''
-  )
-  const [saving, setSaving] = useState(false)
+  const [savingName, setSavingName] = useState(false)
 
   useEffect(() => {
     setName(profile.name)
-    setClassNumber(profile.class_number ? String(profile.class_number) : '')
-  }, [profile])
+  }, [profile.name])
 
-  const showClassField =
-    profile.grade !== null &&
-    profile.role !== 'teacher' &&
-    profile.role !== 'admin'
+  const showClassInfo = profile.role !== 'admin'
+  const canRequestGradeChange =
+    profile.role !== 'admin' && isNonStudentEmail(user.email ?? '')
+  const canRequestClassChange = showClassInfo
+  const showChangeRequest = canRequestGradeChange || canRequestClassChange
 
   const trimmedName = name.trim()
-  const currentClass = profile.class_number ? String(profile.class_number) : ''
   const nameChanged = trimmedName !== profile.name && trimmedName.length > 0
-  const classChanged = showClassField && classNumber !== currentClass
-  const dirty = nameChanged || classChanged
 
-  const save = async () => {
+  const saveName = async () => {
     if (!trimmedName) {
       alert('이름을 입력해주세요.')
       return
     }
-    setSaving(true)
+    setSavingName(true)
     try {
       const supabase = createClient()
-      const updates: Record<string, unknown> = { name: trimmedName }
-      if (showClassField && classNumber) {
-        updates.class_number = Number(classNumber)
-      }
       const { error } = await supabase
         .from('users')
-        .update(updates)
+        .update({ name: trimmedName })
         .eq('id', user.id)
       if (error) throw error
       await refresh()
-      alert('저장되었습니다.')
+      alert('이름이 저장되었습니다.')
     } catch (err) {
-      console.error('save profile failed:', err)
+      console.error('save name failed:', err)
       alert(`저장 실패: ${getErrorMessage(err)}`)
     } finally {
-      setSaving(false)
+      setSavingName(false)
     }
   }
 
@@ -279,13 +271,27 @@ function ProfileInfoCard({
 
         <div className="space-y-1.5">
           <Label htmlFor="name">이름</Label>
-          <Input
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="이름을 입력하세요"
-            maxLength={40}
-          />
+          <div className="flex gap-2">
+            <Input
+              id="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="이름을 입력하세요"
+              maxLength={40}
+              className="flex-1"
+            />
+            <Button
+              onClick={saveName}
+              disabled={!nameChanged || savingName}
+              className="shrink-0 bg-zinc-900 text-white hover:bg-zinc-800"
+            >
+              {savingName ? (
+                <Loader2Icon className="h-4 w-4 animate-spin" />
+              ) : (
+                <SaveIcon className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-1.5">
@@ -293,28 +299,229 @@ function ProfileInfoCard({
           <Input id="email" value={user.email ?? ''} disabled readOnly />
         </div>
 
-        {profile.grade !== null && (
+        {showChangeRequest && (
+          <ProfileChangeSection
+            profile={profile}
+            canGrade={canRequestGradeChange}
+            canClass={canRequestClassChange}
+            refresh={refresh}
+          />
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function ProfileChangeSection({
+  profile,
+  canGrade,
+  canClass,
+  refresh,
+}: {
+  profile: User
+  canGrade: boolean
+  canClass: boolean
+  refresh: Refresh
+}) {
+  const status = profile.profile_change_status
+  const [open, setOpen] = useState(false)
+  const [gradeSel, setGradeSel] = useState<string>('')
+  const [classSel, setClassSel] = useState<string>('')
+  const [saving, setSaving] = useState(false)
+
+  const openForm = () => {
+    setGradeSel(
+      profile.pending_grade
+        ? String(profile.pending_grade)
+        : profile.grade
+          ? String(profile.grade)
+          : ''
+    )
+    setClassSel(
+      profile.pending_class_number
+        ? String(profile.pending_class_number)
+        : profile.class_number
+          ? String(profile.class_number)
+          : ''
+    )
+    setOpen(true)
+  }
+
+  const submitRequest = async () => {
+    const nextGrade =
+      canGrade && gradeSel ? Number(gradeSel) : profile.grade ?? null
+    const nextClass =
+      canClass && classSel ? Number(classSel) : profile.class_number ?? null
+
+    if (canClass && !classSel) {
+      alert('새로운 반을 선택해주세요.')
+      return
+    }
+
+    const changed =
+      (canGrade && nextGrade !== profile.grade) ||
+      (canClass && nextClass !== profile.class_number)
+    if (!changed) {
+      alert('현재와 다른 값을 선택해주세요.')
+      return
+    }
+
+    if (!confirm('정보 변경을 요청할까요? 관리자 승인 후 반영돼요.')) return
+    setSaving(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('users')
+        .update({
+          pending_grade: canGrade ? nextGrade : null,
+          pending_class_number: canClass ? nextClass : null,
+          profile_change_status: 'pending',
+        })
+        .eq('id', profile.id)
+      if (error) throw error
+      await refresh()
+      setOpen(false)
+      alert('요청이 접수되었어요. 관리자 승인을 기다려주세요.')
+    } catch (err) {
+      console.error('profile change request failed:', err)
+      alert(`요청 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const cancelRequest = async () => {
+    if (!confirm('변경 요청을 취소할까요?')) return
+    setSaving(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('users')
+        .update({
+          pending_grade: null,
+          pending_class_number: null,
+          profile_change_status: 'none',
+        })
+        .eq('id', profile.id)
+      if (error) throw error
+      await refresh()
+    } catch (err) {
+      console.error('cancel profile change failed:', err)
+      alert(`취소 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const currentLabel = `${profile.grade ? `${profile.grade}학년` : '학년 미지정'}${profile.class_number ? ` ${profile.class_number}반` : ''}`
+  const pendingLabel = `${
+    profile.pending_grade
+      ? `${profile.pending_grade}학년`
+      : profile.grade
+        ? `${profile.grade}학년`
+        : '학년 미지정'
+  }${
+    profile.pending_class_number
+      ? ` ${profile.pending_class_number}반`
+      : profile.class_number
+        ? ` ${profile.class_number}반`
+        : ''
+  }`
+
+  return (
+    <div className="space-y-2 border-t border-zinc-100 pt-4">
+      <div className="flex items-center justify-between">
+        <Label>학년 · 반 정보</Label>
+        {!open && status === 'none' && (
+          <button
+            type="button"
+            onClick={openForm}
+            className="text-xs font-medium text-indigo-600 hover:text-indigo-700"
+          >
+            변경 요청
+          </button>
+        )}
+      </div>
+
+      <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-700">
+        {currentLabel}
+        <span className="ml-auto text-[10px] text-zinc-400">
+          {isNonStudentEmail(profile.email)
+            ? '수동 입력'
+            : '학년은 이메일 기반'}
+        </span>
+      </div>
+
+      {status === 'pending' && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <ClockIcon className="h-3.5 w-3.5 shrink-0" />
+          <span className="flex items-center gap-1 font-medium">
+            변경 요청 중
+            <ArrowRightIcon className="h-3 w-3" />
+            <span className="font-semibold">{pendingLabel}</span>
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={cancelRequest}
+            disabled={saving}
+            className="ml-auto h-6 border-amber-300 bg-white px-2 text-[11px] text-amber-800 hover:bg-amber-100"
+          >
+            취소
+          </Button>
+        </div>
+      )}
+
+      {status === 'rejected' && !open && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">
+          <XCircleIcon className="h-3.5 w-3.5 shrink-0" />
+          <span className="font-medium">변경 요청이 반려되었습니다</span>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={openForm}
+            className="ml-auto h-6 border-red-300 bg-white px-2 text-[11px] text-red-800 hover:bg-red-100"
+          >
+            다시 요청
+          </Button>
+        </div>
+      )}
+
+      {open && status !== 'pending' && (
+        <div className="space-y-3 rounded-lg border border-zinc-200 bg-white p-3">
           <div
             className={cn(
-              'gap-2',
-              showClassField ? 'grid grid-cols-2' : 'flex'
+              'grid gap-2',
+              canGrade && canClass ? 'grid-cols-2' : 'grid-cols-1'
             )}
           >
-            <div className="space-y-1.5">
-              <Label>학년</Label>
-              <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-700">
-                {profile.grade}학년
-                <span className="ml-auto text-[10px] text-zinc-400">
-                  이메일 기반
-                </span>
-              </div>
-            </div>
-            {showClassField && (
+            {canGrade && (
               <div className="space-y-1.5">
-                <Label htmlFor="class-select">반</Label>
-                <Select value={classNumber} onValueChange={setClassNumber}>
-                  <SelectTrigger id="class-select" className="h-9 w-full">
-                    <SelectValue placeholder="반 선택" />
+                <Label htmlFor="pc-grade" className="text-xs">
+                  새 학년
+                </Label>
+                <Select value={gradeSel} onValueChange={setGradeSel}>
+                  <SelectTrigger id="pc-grade" className="h-9 w-full">
+                    <SelectValue placeholder="학년" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GRADES.map((g) => (
+                      <SelectItem key={g} value={String(g)}>
+                        {g}학년
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            {canClass && (
+              <div className="space-y-1.5">
+                <Label htmlFor="pc-class" className="text-xs">
+                  새 반
+                </Label>
+                <Select value={classSel} onValueChange={setClassSel}>
+                  <SelectTrigger id="pc-class" className="h-9 w-full">
+                    <SelectValue placeholder="반" />
                   </SelectTrigger>
                   <SelectContent>
                     {CLASS_OPTIONS.map((c) => (
@@ -327,29 +534,39 @@ function ProfileInfoCard({
               </div>
             )}
           </div>
-        )}
-
-        <Button
-          onClick={save}
-          disabled={!dirty || saving}
-          className="h-10 w-full rounded-lg bg-zinc-900 text-white hover:bg-zinc-800"
-        >
-          {saving ? (
-            <>
-              <Loader2Icon className="h-4 w-4 animate-spin" />
-              <span className="ml-1.5">저장 중…</span>
-            </>
-          ) : (
-            <>
-              <SaveIcon className="h-4 w-4" />
-              <span className="ml-1.5">저장</span>
-            </>
-          )}
-        </Button>
-      </CardContent>
-    </Card>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setOpen(false)}
+              disabled={saving}
+              className="flex-1"
+            >
+              취소
+            </Button>
+            <Button
+              onClick={submitRequest}
+              disabled={saving}
+              className="flex-1 bg-zinc-900 text-white hover:bg-zinc-800"
+            >
+              {saving ? (
+                <>
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                  <span className="ml-1.5">요청 중…</span>
+                </>
+              ) : (
+                '변경 요청'
+              )}
+            </Button>
+          </div>
+          <p className="text-[11px] text-zinc-500">
+            관리자 승인 후 반영돼요. 승인 대기 중에는 다시 요청할 수 없어요.
+          </p>
+        </div>
+      )}
+    </div>
   )
 }
+
 
 /* ================================ Section 2 =============================== */
 
@@ -486,6 +703,14 @@ function RoleCard({
                   icon={<CheckCircle2Icon className="h-3 w-3" />}
                 >
                   승인됨
+                </StatusChip>
+              )}
+              {profile.teacher_status === 'pending_downgrade' && (
+                <StatusChip
+                  variant="amber"
+                  icon={<UserMinusIcon className="h-3 w-3" />}
+                >
+                  학생 전환 승인 대기
                 </StatusChip>
               )}
             </>
@@ -635,12 +860,16 @@ function TeacherProfileCard({
   profile,
   teacher,
   loading,
+  isPending,
+  refresh,
   onUpdated,
 }: {
   user: SupabaseUser
   profile: User
   teacher: Teacher | null
   loading: boolean
+  isPending: boolean
+  refresh: Refresh
   onUpdated: Refresh
 }) {
   const [name, setName] = useState('')
@@ -649,6 +878,7 @@ function TeacherProfileCard({
   const [grades, setGrades] = useState<number[]>([])
   const [status, setStatus] = useState<TeacherStatus>('unknown')
   const [saving, setSaving] = useState(false)
+  const [downgradeSaving, setDowngradeSaving] = useState(false)
 
   useEffect(() => {
     if (teacher) {
@@ -741,6 +971,52 @@ function TeacherProfileCard({
     }
   }
 
+  const requestDowngrade = async () => {
+    if (
+      !confirm(
+        '선생님 계정을 포기하고 학생으로 전환하시겠어요?\n\n관리자 승인이 필요하며, 승인 시 자료 등록·공지 권한이 해제됩니다.'
+      )
+    )
+      return
+    setDowngradeSaving(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('users')
+        .update({ teacher_status: 'pending_downgrade' })
+        .eq('id', user.id)
+      if (error) throw error
+      await refresh()
+      alert('학생 계정 전환 요청이 접수되었어요.')
+    } catch (err) {
+      console.error('downgrade request failed:', err)
+      alert(`요청 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setDowngradeSaving(false)
+    }
+  }
+
+  const cancelDowngrade = async () => {
+    if (!confirm('학생 전환 요청을 취소할까요?')) return
+    setDowngradeSaving(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('users')
+        .update({ teacher_status: 'approved' })
+        .eq('id', user.id)
+      if (error) throw error
+      await refresh()
+    } catch (err) {
+      console.error('cancel downgrade failed:', err)
+      alert(`취소 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setDowngradeSaving(false)
+    }
+  }
+
+  const isPendingDowngrade = profile.teacher_status === 'pending_downgrade'
+
   return (
     <Card>
       <CardHeader>
@@ -754,6 +1030,17 @@ function TeacherProfileCard({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        {isPending && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm text-amber-800">
+            <ClockIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="flex-1 leading-tight">
+              <div className="font-semibold">관리자 승인 대기 중</div>
+              <p className="mt-0.5 text-xs text-amber-700/90">
+                미리 프로필을 채워두면 승인 후 바로 학생들에게 표시돼요.
+              </p>
+            </div>
+          </div>
+        )}
         {loading ? (
           <div className="flex items-center justify-center py-6 text-zinc-400">
             <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
@@ -874,6 +1161,46 @@ function TeacherProfileCard({
                 </>
               )}
             </Button>
+
+            {/* 학생 전환: pending 상태에서는 표시하지 않음 */}
+            {!isPending && (
+              <div className="border-t border-zinc-100 pt-3">
+                {isPendingDowngrade ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    <ClockIcon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="font-medium">
+                      학생 전환 승인 대기 중
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={cancelDowngrade}
+                      disabled={downgradeSaving}
+                      className="ml-auto h-6 border-amber-300 bg-white px-2 text-[11px] text-amber-800 hover:bg-amber-100"
+                    >
+                      취소
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={requestDowngrade}
+                    disabled={downgradeSaving}
+                    className="w-full text-xs text-zinc-500 hover:bg-zinc-50 hover:text-zinc-700"
+                  >
+                    {downgradeSaving ? (
+                      <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <>
+                        <UserMinusIcon className="h-3.5 w-3.5" />
+                        <span className="ml-1.5">학생 계정으로 전환</span>
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
           </>
         )}
       </CardContent>
@@ -892,17 +1219,91 @@ function TeacherScheduleCard({
   schedules: TeacherSchedule[]
   onUpdated: Refresh
 }) {
-  const [editingCell, setEditingCell] = useState<{
-    day: number
-    period: number
-    existing: TeacherSchedule | null
-  } | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [busyIds, setBusyIds] = useState<Record<string, boolean>>({})
 
-  const scheduleMap = useMemo(() => {
-    const m = new Map<string, TeacherSchedule>()
-    for (const s of schedules) m.set(`${s.day_of_week}-${s.period}`, s)
-    return m
-  }, [schedules])
+  // form state
+  const [day, setDay] = useState<string>('')
+  const [period, setPeriod] = useState<string>('')
+  const [classroom, setClassroom] = useState('')
+  const [grade, setGrade] = useState<string>('')
+  const [classNumber, setClassNumber] = useState<string>('')
+  const [saving, setSaving] = useState(false)
+
+  const sorted = useMemo(
+    () =>
+      [...schedules].sort((a, b) => {
+        if (a.day_of_week !== b.day_of_week) return a.day_of_week - b.day_of_week
+        return a.period - b.period
+      }),
+    [schedules]
+  )
+
+  const resetForm = () => {
+    setDay('')
+    setPeriod('')
+    setClassroom('')
+    setGrade('')
+    setClassNumber('')
+  }
+
+  const startAdd = () => {
+    resetForm()
+    setAdding(true)
+  }
+
+  const cancelAdd = () => {
+    resetForm()
+    setAdding(false)
+  }
+
+  const addSchedule = async () => {
+    if (!day || !period || !classroom.trim() || !grade || !classNumber) return
+    setSaving(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from('teacher_schedules').insert({
+        teacher_id: teacherId,
+        day_of_week: Number(day),
+        period: Number(period),
+        classroom: classroom.trim(),
+        grade: Number(grade),
+        class_number: Number(classNumber),
+      })
+      if (error) throw error
+      await onUpdated()
+      cancelAdd()
+    } catch (err) {
+      console.error('schedule insert failed:', err)
+      alert(`추가 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeSchedule = async (s: TeacherSchedule) => {
+    if (!confirm(`${DAY_LABELS[s.day_of_week - 1]}요일 ${s.period}교시를 삭제할까요?`))
+      return
+    setBusyIds((prev) => ({ ...prev, [s.id]: true }))
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('teacher_schedules')
+        .delete()
+        .eq('id', s.id)
+      if (error) throw error
+      await onUpdated()
+    } catch (err) {
+      console.error('schedule delete failed:', err)
+      alert(`삭제 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setBusyIds((prev) => {
+        const next = { ...prev }
+        delete next[s.id]
+        return next
+      })
+    }
+  }
 
   return (
     <Card>
@@ -911,243 +1312,177 @@ function TeacherScheduleCard({
           내 시간표
         </CardTitle>
         <CardDescription>
-          빈 셀을 눌러 시간을 추가하고, 채워진 셀을 눌러 수정 · 삭제할 수 있어요.
+          담당 수업 시간을 추가해두면 학생들이 지금 어디에 계신지 확인할 수 있어요.
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-6 gap-1 text-[10px]">
-          <div />
-          {DAY_LABELS.map((d) => (
-            <div
-              key={d}
-              className="py-1 text-center text-xs font-semibold text-zinc-700"
-            >
-              {d}
-            </div>
-          ))}
-          {PERIODS.map((p) => (
-            <Fragment key={p}>
-              <div className="flex items-center justify-center py-1 text-xs font-medium text-zinc-500">
-                {p}교시
-              </div>
-              {DAY_LABELS.map((_, dayIdx) => {
-                const day = dayIdx + 1
-                const s = scheduleMap.get(`${day}-${p}`)
-                return (
-                  <button
-                    key={dayIdx}
-                    type="button"
-                    onClick={() =>
-                      setEditingCell({ day, period: p, existing: s ?? null })
-                    }
-                    className={cn(
-                      'group flex min-h-14 flex-col items-center justify-center rounded-md p-1 text-center transition-colors',
-                      s
-                        ? 'border border-indigo-100 bg-indigo-50 text-indigo-900 hover:bg-indigo-100'
-                        : 'border border-zinc-100 bg-zinc-50 hover:bg-zinc-100'
-                    )}
+      <CardContent className="space-y-3">
+        {sorted.length === 0 && !adding ? (
+          <div className="rounded-lg border border-dashed border-zinc-200 bg-white py-8 text-center text-sm text-zinc-500">
+            아직 시간표가 없어요.
+          </div>
+        ) : (
+          <ul className="divide-y divide-zinc-100 overflow-hidden rounded-lg border border-zinc-200 bg-white">
+            {sorted.map((s) => {
+              const busy = !!busyIds[s.id]
+              return (
+                <li
+                  key={s.id}
+                  className="flex items-center gap-2 px-3 py-2.5 text-sm"
+                >
+                  <span className="inline-flex h-6 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 text-[11px] font-semibold text-zinc-700">
+                    {DAY_LABELS[s.day_of_week - 1]}
+                  </span>
+                  <span className="inline-flex h-6 shrink-0 items-center rounded-md border border-zinc-200 bg-zinc-50 px-2 text-[11px] font-medium text-zinc-700 tabular-nums">
+                    {s.period}교시
+                  </span>
+                  <span className="min-w-0 flex-1 truncate font-medium text-zinc-900">
+                    {s.classroom}
+                  </span>
+                  <span className="shrink-0 text-xs text-zinc-500">
+                    {s.grade}학년 {s.class_number}반
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => removeSchedule(s)}
+                    disabled={busy}
+                    aria-label="시간표 삭제"
+                    className="text-zinc-400 hover:bg-red-50 hover:text-red-600"
                   >
-                    {s ? (
-                      <>
-                        <span className="text-[10px] font-semibold leading-tight">
-                          {s.classroom}
-                        </span>
-                        <span className="text-[9px] leading-tight text-indigo-700/70">
-                          {s.grade}-{s.class_number}
-                        </span>
-                        <PencilIcon className="mt-0.5 h-3 w-3 text-indigo-500 opacity-0 transition-opacity group-hover:opacity-100" />
-                      </>
+                    {busy ? (
+                      <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <PlusIcon className="h-3.5 w-3.5 text-zinc-400" />
+                      <Trash2Icon className="h-3.5 w-3.5" />
                     )}
-                  </button>
-                )
-              })}
-            </Fragment>
-          ))}
-        </div>
-      </CardContent>
+                  </Button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
-      {editingCell && (
-        <ScheduleCellDialog
-          teacherId={teacherId}
-          cell={editingCell}
-          onClose={() => setEditingCell(null)}
-          onSaved={onUpdated}
-        />
-      )}
-    </Card>
-  )
-}
-
-function ScheduleCellDialog({
-  teacherId,
-  cell,
-  onClose,
-  onSaved,
-}: {
-  teacherId: string
-  cell: { day: number; period: number; existing: TeacherSchedule | null }
-  onClose: () => void
-  onSaved: Refresh
-}) {
-  const [classroom, setClassroom] = useState(cell.existing?.classroom ?? '')
-  const [grade, setGrade] = useState<string>(
-    cell.existing ? String(cell.existing.grade) : ''
-  )
-  const [classNumber, setClassNumber] = useState<string>(
-    cell.existing ? String(cell.existing.class_number) : ''
-  )
-  const [saving, setSaving] = useState(false)
-
-  const dayLabel = DAY_LABELS[cell.day - 1]
-
-  const save = async () => {
-    if (!classroom.trim() || !grade || !classNumber) return
-    setSaving(true)
-    try {
-      const supabase = createClient()
-      const payload = {
-        teacher_id: teacherId,
-        day_of_week: cell.day,
-        period: cell.period,
-        classroom: classroom.trim(),
-        grade: Number(grade),
-        class_number: Number(classNumber),
-      }
-      if (cell.existing) {
-        const { error } = await supabase
-          .from('teacher_schedules')
-          .update(payload)
-          .eq('id', cell.existing.id)
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('teacher_schedules')
-          .insert(payload)
-        if (error) throw error
-      }
-      await onSaved()
-      onClose()
-    } catch (err) {
-      console.error('schedule save failed:', err)
-      alert(`저장 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const remove = async () => {
-    if (!cell.existing) return
-    if (!confirm('이 시간을 삭제할까요?')) return
-    setSaving(true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('teacher_schedules')
-        .delete()
-        .eq('id', cell.existing.id)
-      if (error) throw error
-      await onSaved()
-      onClose()
-    } catch (err) {
-      console.error('schedule delete failed:', err)
-      alert(`삭제 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="sm:max-w-sm">
-        <DialogHeader>
-          <DialogTitle>
-            {dayLabel}요일 {cell.period}교시
-          </DialogTitle>
-        </DialogHeader>
-        <div className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="cell-classroom">교실</Label>
-            <Input
-              id="cell-classroom"
-              placeholder="예: 3-2"
-              value={classroom}
-              onChange={(e) => setClassroom(e.target.value)}
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="cell-grade">학년</Label>
-              <Select value={grade} onValueChange={setGrade}>
-                <SelectTrigger id="cell-grade" className="h-9 w-full">
-                  <SelectValue placeholder="학년" />
-                </SelectTrigger>
-                <SelectContent>
-                  {GRADES.map((g) => (
-                    <SelectItem key={g} value={String(g)}>
-                      {g}학년
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        {adding ? (
+          <div className="space-y-3 rounded-lg border border-zinc-200 bg-zinc-50/60 p-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="sch-day">요일</Label>
+                <Select value={day} onValueChange={setDay}>
+                  <SelectTrigger id="sch-day" className="h-9 w-full">
+                    <SelectValue placeholder="요일" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DAY_LABELS.map((d, i) => (
+                      <SelectItem key={d} value={String(i + 1)}>
+                        {d}요일
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="sch-period">교시</Label>
+                <Select value={period} onValueChange={setPeriod}>
+                  <SelectTrigger id="sch-period" className="h-9 w-full">
+                    <SelectValue placeholder="교시" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PERIODS.map((p) => (
+                      <SelectItem key={p} value={String(p)}>
+                        {p}교시
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="cell-class">반</Label>
-              <Select value={classNumber} onValueChange={setClassNumber}>
-                <SelectTrigger id="cell-class" className="h-9 w-full">
-                  <SelectValue placeholder="반" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CLASS_OPTIONS.map((c) => (
-                    <SelectItem key={c} value={String(c)}>
-                      {c}반
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor="sch-classroom">교실</Label>
+              <Input
+                id="sch-classroom"
+                placeholder="예: 3-2 교실 / 물리실 2"
+                value={classroom}
+                onChange={(e) => setClassroom(e.target.value)}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="sch-grade">학년</Label>
+                <Select value={grade} onValueChange={setGrade}>
+                  <SelectTrigger id="sch-grade" className="h-9 w-full">
+                    <SelectValue placeholder="학년" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GRADES.map((g) => (
+                      <SelectItem key={g} value={String(g)}>
+                        {g}학년
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="sch-class">반</Label>
+                <Select value={classNumber} onValueChange={setClassNumber}>
+                  <SelectTrigger id="sch-class" className="h-9 w-full">
+                    <SelectValue placeholder="반" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CLASS_OPTIONS.map((c) => (
+                      <SelectItem key={c} value={String(c)}>
+                        {c}반
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={cancelAdd}
+                disabled={saving}
+                className="flex-1"
+              >
+                취소
+              </Button>
+              <Button
+                type="button"
+                onClick={addSchedule}
+                disabled={
+                  saving ||
+                  !day ||
+                  !period ||
+                  !classroom.trim() ||
+                  !grade ||
+                  !classNumber
+                }
+                className="flex-1 bg-zinc-900 text-white hover:bg-zinc-800"
+              >
+                {saving ? (
+                  <>
+                    <Loader2Icon className="h-4 w-4 animate-spin" />
+                    <span className="ml-1.5">추가 중…</span>
+                  </>
+                ) : (
+                  '추가'
+                )}
+              </Button>
             </div>
           </div>
-        </div>
-        <DialogFooter className="gap-2">
-          {cell.existing && (
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={remove}
-              disabled={saving}
-              className="mr-auto"
-            >
-              <Trash2Icon />
-              <span className="ml-1">삭제</span>
-            </Button>
-          )}
+        ) : (
           <Button
             type="button"
             variant="outline"
-            onClick={onClose}
-            disabled={saving}
+            onClick={startAdd}
+            className="h-10 w-full rounded-lg border-dashed border-zinc-300 text-zinc-700 hover:bg-zinc-50"
           >
-            취소
+            <PlusIcon className="h-4 w-4" />
+            <span className="ml-1.5">시간표 추가</span>
           </Button>
-          <Button
-            type="button"
-            onClick={save}
-            disabled={saving || !classroom.trim() || !grade || !classNumber}
-            className="bg-zinc-900 text-white hover:bg-zinc-800"
-          >
-            {saving ? (
-              <>
-                <Loader2Icon className="h-4 w-4 animate-spin" />
-                <span className="ml-1">저장 중…</span>
-              </>
-            ) : (
-              '저장'
-            )}
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -1361,6 +1696,99 @@ function TeacherApplyCard({
             )}
           </>
         )}
+      </CardContent>
+    </Card>
+  )
+}
+
+/* ================================ Section 6 =============================== */
+
+function DangerZoneCard({
+  user,
+  profile,
+}: {
+  user: SupabaseUser
+  profile: User
+}) {
+  const router = useRouter()
+  const [deleting, setDeleting] = useState(false)
+
+  const deleteAccount = async () => {
+    if (
+      !confirm(
+        '정말 계정을 삭제하시겠어요?\n\n모든 데이터가 삭제되며 복구할 수 없습니다.\n동일한 이메일로 다시 로그인하면 새 계정으로 시작돼요.'
+      )
+    )
+      return
+    if (
+      !confirm(
+        `확인을 위해 한 번 더 물어볼게요.\n\n${profile.name} 님의 계정을 정말 삭제할까요?`
+      )
+    )
+      return
+
+    setDeleting(true)
+    try {
+      const supabase = createClient()
+
+      // public.users 삭제 (관련 데이터는 FK CASCADE 로 정리됨)
+      const { error: delErr } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', user.id)
+      if (delErr) throw delErr
+
+      // 세션 종료. auth.users 자체는 서버 측에서만 삭제 가능하므로 유지.
+      // 동일 이메일로 재로그인하면 public.users 부재 → auth/callback 에서 새 프로필 생성.
+      await supabase.auth.signOut()
+      router.replace('/login')
+      router.refresh()
+    } catch (err) {
+      console.error('delete account failed:', err)
+      alert(`삭제 실패: ${getErrorMessage(err)}`)
+      setDeleting(false)
+    }
+  }
+
+  return (
+    <Card className="border-red-200 bg-red-50/40">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-1.5 text-lg font-semibold tracking-tight text-red-700">
+          <AlertTriangleIcon className="h-4 w-4" />
+          위험 구역
+        </CardTitle>
+        <CardDescription className="text-red-700/80">
+          계정을 삭제하면 프로필 · 자료 · 공지 등 모든 데이터가 사라지며 되돌릴
+          수 없어요.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="rounded-lg border border-red-200 bg-white p-3 text-xs text-zinc-600">
+          <p className="font-medium text-zinc-900">계정 삭제 안내</p>
+          <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
+            <li>공개된 자료·공지·시간표는 함께 삭제돼요.</li>
+            <li>같은 이메일로 재로그인하면 새 계정으로 시작할 수 있어요.</li>
+            <li>선생님 프로필도 함께 삭제돼요.</li>
+          </ul>
+        </div>
+        <Button
+          variant="destructive"
+          onClick={deleteAccount}
+          disabled={deleting}
+          className="w-full"
+        >
+          {deleting ? (
+            <>
+              <Loader2Icon className="h-4 w-4 animate-spin" />
+              <span className="ml-1.5">삭제 중…</span>
+            </>
+          ) : (
+            <>
+              <Trash2Icon className="h-4 w-4" />
+              <span className="ml-1.5">계정 삭제</span>
+            </>
+          )}
+        </Button>
       </CardContent>
     </Card>
   )

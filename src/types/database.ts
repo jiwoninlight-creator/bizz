@@ -1,7 +1,14 @@
 export type UserRole = 'student' | 'teacher' | 'admin' | 'class_leader'
 export type ClassLeaderType = 'leader' | 'vice_leader'
 export type ClassLeaderStatus = 'none' | 'pending' | 'approved' | 'rejected'
-export type TeacherApplicationStatus = 'none' | 'pending' | 'approved' | 'rejected'
+export type TeacherApplicationStatus =
+  | 'none'
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'pending_downgrade'
+
+export type ProfileChangeStatus = 'none' | 'pending' | 'approved' | 'rejected'
 
 export type User = {
   id: string
@@ -16,6 +23,9 @@ export type User = {
   onboarded: boolean
   avatar_url: string | null
   created_at: string
+  pending_grade: number | null
+  pending_class_number: number | null
+  profile_change_status: ProfileChangeStatus
 }
 
 export type TeacherStatus =

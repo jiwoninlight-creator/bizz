@@ -82,6 +82,22 @@ function sanitizeStorageFilename(name: string): string {
   return safeExt ? `${safeBase}.${safeExt}` : safeBase
 }
 
+/**
+ * publicUrl(...materials/<userId>/<timestamp>_<name>.ext) 에서 storage 내부 경로만 추출.
+ * 예: https://xxx.supabase.co/storage/v1/object/public/materials/abc/123_file.pdf
+ *   → 'abc/123_file.pdf'
+ */
+function extractStoragePath(url: string): string | null {
+  try {
+    const marker = '/object/public/materials/'
+    const idx = url.indexOf(marker)
+    if (idx < 0) return null
+    return decodeURIComponent(url.slice(idx + marker.length))
+  } catch {
+    return null
+  }
+}
+
 type ViewMode = 'all' | 'by-teacher'
 
 export default function MaterialsPage() {
@@ -114,6 +130,10 @@ export default function MaterialsPage() {
   const [formClassNumber, setFormClassNumber] = useState<string>('')
   const [formCategory, setFormCategory] = useState<string>('수업자료')
   const [formFile, setFormFile] = useState<File | null>(null)
+
+  const [editingMaterial, setEditingMaterial] = useState<MaterialWithTeacher | null>(
+    null
+  )
 
   useEffect(() => {
     if (gradeFilterInitialized) return
@@ -310,20 +330,49 @@ export default function MaterialsPage() {
   const canDeleteMaterial = useCallback(
     (m: MaterialWithTeacher): boolean => {
       if (!user) return false
+      // 관리자: 모든 자료 삭제 가능
       if (isAdmin) return true
+      // 본인 업로드
       if (m.uploaded_by === user.id) {
-        if (m.status === 'pending') return true
-        return isTeacher
+        // 선생님: 승인 여부 무관하게 본인 자료 삭제 가능
+        if (isTeacher) return true
+        // 일반/학생/반장: pending 상태에서만 삭제 가능. approved 후에는 불가.
+        return m.status === 'pending'
       }
       return false
     },
     [user, isAdmin, isTeacher]
   )
 
+  const canEditMaterial = useCallback(
+    (m: MaterialWithTeacher): boolean => {
+      if (!user) return false
+      // 관리자: 모든 자료 수정 가능
+      if (isAdmin) return true
+      // 선생님: 본인이 올린 approved/pending 자료 수정 가능
+      if (isTeacher && m.uploaded_by === user.id) return true
+      return false
+    },
+    [user, isAdmin, isTeacher]
+  )
+
   const handleDelete = async (m: MaterialWithTeacher) => {
-    if (!confirm(`"${m.title}" 자료를 삭제할까요?`)) return
+    if (!confirm(`"${m.title}" 자료를 삭제할까요?\n\nStorage의 파일도 함께 삭제돼요.`))
+      return
     try {
       const supabase = createClient()
+
+      // Storage에서 파일 삭제 (실패해도 DB row 삭제는 진행)
+      const storagePath = extractStoragePath(m.file_url)
+      if (storagePath) {
+        const { error: storageErr } = await supabase.storage
+          .from('materials')
+          .remove([storagePath])
+        if (storageErr) {
+          console.warn('Storage delete failed (continuing):', storageErr)
+        }
+      }
+
       const { error } = await supabase
         .from('materials')
         .delete()
@@ -334,6 +383,10 @@ export default function MaterialsPage() {
       console.error('Delete material failed:', err)
       alert(`삭제 실패: ${getErrorMessage(err)}`)
     }
+  }
+
+  const handleEdit = (m: MaterialWithTeacher) => {
+    setEditingMaterial(m)
   }
 
   // ---------------- Derived data for by-teacher view ----------------
@@ -488,6 +541,8 @@ export default function MaterialsPage() {
                 currentUserId={user?.id}
                 canDelete={canDeleteMaterial(m)}
                 onDelete={handleDelete}
+                canEdit={canEditMaterial(m)}
+                onEdit={handleEdit}
               />
             ))}
           </div>
@@ -528,6 +583,8 @@ export default function MaterialsPage() {
                       currentUserId={user?.id}
                       canDelete={canDeleteMaterial}
                       onDelete={handleDelete}
+                      canEdit={canEditMaterial}
+                      onEdit={handleEdit}
                     />
                   )
                 })}
@@ -557,6 +614,8 @@ export default function MaterialsPage() {
                       currentUserId={user?.id}
                       canDelete={canDeleteMaterial(m)}
                       onDelete={handleDelete}
+                      canEdit={canEditMaterial(m)}
+                      onEdit={handleEdit}
                     />
                   ))}
               </div>
@@ -614,6 +673,18 @@ export default function MaterialsPage() {
         formFile={formFile}
         setFormFile={setFormFile}
       />
+
+      <MaterialEditDialog
+        material={editingMaterial}
+        teachers={teachers}
+        onOpenChange={(v) => {
+          if (!v) setEditingMaterial(null)
+        }}
+        onSaved={async () => {
+          setEditingMaterial(null)
+          await fetchMaterials()
+        }}
+      />
     </div>
   )
 }
@@ -651,12 +722,16 @@ function TeacherSection({
   currentUserId,
   canDelete,
   onDelete,
+  canEdit,
+  onEdit,
 }: {
   teacher: Teacher
   materials: MaterialWithTeacher[]
   currentUserId?: string
   canDelete: (m: MaterialWithTeacher) => boolean
   onDelete: (m: MaterialWithTeacher) => void
+  canEdit: (m: MaterialWithTeacher) => boolean
+  onEdit: (m: MaterialWithTeacher) => void
 }) {
   return (
     <div className="rounded-lg border border-zinc-200 bg-white p-3">
@@ -689,6 +764,8 @@ function TeacherSection({
             currentUserId={currentUserId}
             canDelete={canDelete(m)}
             onDelete={onDelete}
+            canEdit={canEdit(m)}
+            onEdit={onEdit}
             compact
           />
         ))}
@@ -937,6 +1014,203 @@ function UploadDialog(props: UploadDialogProps) {
             </Button>
           </DialogFooter>
         </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/* --------------------------- Material edit dialog ------------------------- */
+
+function MaterialEditDialog({
+  material,
+  teachers,
+  onOpenChange,
+  onSaved,
+}: {
+  material: MaterialWithTeacher | null
+  teachers: Teacher[]
+  onOpenChange: (open: boolean) => void
+  onSaved: () => Promise<void> | void
+}) {
+  const [title, setTitle] = useState('')
+  const [subject, setSubject] = useState('')
+  const [teacherId, setTeacherId] = useState('')
+  const [grade, setGrade] = useState('')
+  const [classNumber, setClassNumber] = useState('')
+  const [category, setCategory] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (!material) return
+    setTitle(material.title)
+    setSubject(material.subject)
+    setTeacherId(material.teacher_id ?? '')
+    setGrade(String(material.grade))
+    setClassNumber(material.class_number ? String(material.class_number) : '')
+    setCategory(material.category ?? '')
+  }, [material])
+
+  if (!material) return null
+
+  const save = async () => {
+    if (!title.trim()) {
+      alert('제목을 입력해주세요.')
+      return
+    }
+    if (!subject || !grade) {
+      alert('과목과 학년을 선택해주세요.')
+      return
+    }
+    setSaving(true)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('materials')
+        .update({
+          title: title.trim(),
+          subject,
+          teacher_id: teacherId || null,
+          grade: Number(grade),
+          class_number: classNumber ? Number(classNumber) : null,
+          category: category || null,
+        })
+        .eq('id', material.id)
+      if (error) throw error
+      await onSaved()
+    } catch (err) {
+      console.error('edit material failed:', err)
+      alert(`저장 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={!!material} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>자료 수정</DialogTitle>
+          <DialogDescription>
+            제목·과목·선생님·학년·반·카테고리를 수정할 수 있어요. 파일은
+            바꿀 수 없어요.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-title">제목</Label>
+            <Input
+              id="edit-title"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-subject">과목</Label>
+              <Select value={subject} onValueChange={setSubject}>
+                <SelectTrigger id="edit-subject" className="h-9 w-full">
+                  <SelectValue placeholder="선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUBJECT_OPTIONS.map((s) => (
+                    <SelectItem key={s} value={s}>
+                      {s}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-category">카테고리</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger id="edit-category" className="h-9 w-full">
+                  <SelectValue placeholder="선택" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORY_OPTIONS.map((c) => (
+                    <SelectItem key={c} value={c}>
+                      {c}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-grade">학년</Label>
+              <Select value={grade} onValueChange={setGrade}>
+                <SelectTrigger id="edit-grade" className="h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[1, 2, 3].map((g) => (
+                    <SelectItem key={g} value={String(g)}>
+                      {g}학년
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-class">공개 범위 (반)</Label>
+              <Select
+                value={classNumber || 'all'}
+                onValueChange={(v) => setClassNumber(v === 'all' ? '' : v)}
+              >
+                <SelectTrigger id="edit-class" className="h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">학년 전체</SelectItem>
+                  {[1, 2, 3, 4, 5, 6].map((c) => (
+                    <SelectItem key={c} value={String(c)}>
+                      {c}반
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-teacher">선생님 (선택)</Label>
+            <Select
+              value={teacherId || 'none'}
+              onValueChange={(v) => setTeacherId(v === 'none' ? '' : v)}
+            >
+              <SelectTrigger id="edit-teacher" className="h-9 w-full">
+                <SelectValue placeholder="선생님" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">공통 · 교과서</SelectItem>
+                {teachers.map((t) => (
+                  <SelectItem key={t.id} value={t.id}>
+                    {t.name} · {t.subject}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            disabled={saving}
+          >
+            취소
+          </Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? (
+              <>
+                <Loader2Icon className="h-4 w-4 animate-spin" />
+                <span className="ml-1.5">저장 중…</span>
+              </>
+            ) : (
+              '저장'
+            )}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

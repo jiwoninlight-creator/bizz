@@ -1,12 +1,11 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { GraduationCapIcon, Loader2Icon, UsersIcon } from 'lucide-react'
+import { Loader2Icon } from 'lucide-react'
 import { createClient } from '@/lib/supabase-client'
 import { useUser } from '@/hooks/useUser'
 import { CLASS_OPTIONS } from '@/lib/school-schedule'
-import { isTeacherEmail } from '@/lib/grade-utils'
 import type { ClassLeaderType } from '@/types/database'
 import { cn, getErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -17,7 +16,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -27,7 +25,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 
-type ApplyAs = 'student' | 'teacher'
 type LeaderChoice = 'none' | 'leader' | 'vice_leader'
 
 const LEADER_OPTIONS: { value: LeaderChoice; label: string; hint: string }[] = [
@@ -36,42 +33,27 @@ const LEADER_OPTIONS: { value: LeaderChoice; label: string; hint: string }[] = [
   { value: 'vice_leader', label: '부반장', hint: '승인 후 반 공지 게시 가능' },
 ]
 
-const TEACHER_SUBJECTS = [
-  '국어',
-  '영어',
-  '수학',
-  '과학',
-  '사회',
-  '역사',
-  '물리',
-  '화학',
-  '생물',
-  '지구과학',
-  '기타',
-] as const
-
-const GRADES = [1, 2, 3] as const
+// 학년: 학번 이메일이 아닌 경우 온보딩에서 직접 선택 (또는 '해당없음')
+const GRADE_OPTIONS = [
+  { value: '1', label: '1학년' },
+  { value: '2', label: '2학년' },
+  { value: '3', label: '3학년' },
+  { value: 'none', label: '해당 없음' },
+]
 
 export default function OnboardingPage() {
   const router = useRouter()
   const { user, profile, loading } = useUser()
 
-  const teacherEligible = useMemo(
-    () => (user?.email ? isTeacherEmail(user.email) : false),
-    [user?.email]
-  )
-
-  const [applyAs, setApplyAs] = useState<ApplyAs>('student')
+  const [gradeSelection, setGradeSelection] = useState<string>('')
   const [classNumber, setClassNumber] = useState<string>('')
   const [leaderChoice, setLeaderChoice] = useState<LeaderChoice>('none')
-  const [tSubject, setTSubject] = useState<string>('')
-  const [tGrades, setTGrades] = useState<number[]>([])
-  const [tOffice, setTOffice] = useState<string>('')
   const [submitting, setSubmitting] = useState(false)
 
-  useEffect(() => {
-    if (teacherEligible) setApplyAs('teacher')
-  }, [teacherEligible])
+  // 이메일 기반 학년이 이미 감지된 경우 (학번 이메일)
+  const hasAutoGrade =
+    profile?.grade !== null && profile?.grade !== undefined
+  const needsManualGrade = !hasAutoGrade
 
   useEffect(() => {
     if (!loading && profile?.onboarded) {
@@ -79,17 +61,21 @@ export default function OnboardingPage() {
     }
   }, [profile?.onboarded, loading, router])
 
-  const toggleGrade = (g: number) => {
-    setTGrades((prev) =>
-      prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g].sort()
-    )
-  }
+  useEffect(() => {
+    if (hasAutoGrade && profile?.grade) {
+      setGradeSelection(String(profile.grade))
+    }
+  }, [hasAutoGrade, profile?.grade])
+
+  const gradeChosen = gradeSelection !== ''
+  const isNoneGrade = gradeSelection === 'none'
+  // 학년이 '해당 없음'이면 반 선택도 스킵
+  const classRequired = gradeChosen && !isNoneGrade
 
   const canSubmit =
     !submitting &&
-    (applyAs === 'student'
-      ? classNumber !== ''
-      : tSubject !== '' && tGrades.length > 0 && tOffice.trim().length > 0)
+    gradeChosen &&
+    (!classRequired || classNumber !== '')
 
   const handleSubmit = async () => {
     if (!user || !canSubmit) return
@@ -97,58 +83,28 @@ export default function OnboardingPage() {
     try {
       const supabase = createClient()
 
-      if (applyAs === 'student') {
-        const leaderType: ClassLeaderType | null =
-          leaderChoice === 'none' ? null : leaderChoice
-        const leaderStatus = leaderChoice === 'none' ? 'none' : 'pending'
-        const { error } = await supabase
-          .from('users')
-          .update({
-            class_number: Number(classNumber),
-            class_leader_type: leaderType,
-            class_leader_status: leaderStatus,
-            onboarded: true,
-          })
-          .eq('id', user.id)
-        if (error) throw error
-      } else {
-        const { error: userErr } = await supabase
-          .from('users')
-          .update({
-            role: 'teacher',
-            teacher_status: 'pending',
-            onboarded: true,
-          })
-          .eq('id', user.id)
-        if (userErr) throw userErr
+      const finalGrade =
+        isNoneGrade || gradeSelection === ''
+          ? null
+          : Number(gradeSelection)
+      const finalClass = classRequired && classNumber ? Number(classNumber) : null
 
-        const displayName =
-          profile?.name ??
-          (typeof user.user_metadata.full_name === 'string'
-            ? user.user_metadata.full_name
-            : null) ??
-          user.email?.split('@')[0] ??
-          '선생님'
-        const photoUrl =
-          profile?.avatar_url ??
-          (typeof user.user_metadata.avatar_url === 'string'
-            ? user.user_metadata.avatar_url
-            : null) ??
-          null
+      const leaderType: ClassLeaderType | null =
+        leaderChoice === 'none' || !classRequired ? null : leaderChoice
+      const leaderStatus =
+        leaderChoice === 'none' || !classRequired ? 'none' : 'pending'
 
-        const { error: tErr } = await supabase.from('teachers').insert({
-          user_id: user.id,
-          name: displayName,
-          subject: tSubject,
-          office_location: tOffice.trim(),
-          photo_url: photoUrl,
-          current_status: 'unknown',
-          is_self_registered: true,
-          managed_grades: tGrades,
-          managed_classes: [],
+      const { error } = await supabase
+        .from('users')
+        .update({
+          grade: finalGrade,
+          class_number: finalClass,
+          class_leader_type: leaderType,
+          class_leader_status: leaderStatus,
+          onboarded: true,
         })
-        if (tErr) throw tErr
-      }
+        .eq('id', user.id)
+      if (error) throw error
 
       router.replace('/calendar')
       router.refresh()
@@ -179,192 +135,120 @@ export default function OnboardingPage() {
             <CardTitle className="text-xl">환영합니다!</CardTitle>
             <CardDescription>
               몇 가지 정보만 알려주면 앱을 사용할 수 있어요.
+              <br />
+              선생님이신 경우 가입 후 설정 페이지에서 신청할 수 있어요.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
-            {teacherEligible && (
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setApplyAs('teacher')}
-                  className={cn(
-                    'flex flex-col items-center gap-1 rounded-lg border px-3 py-3 text-center transition-colors',
-                    applyAs === 'teacher'
-                      ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
-                      : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
-                  )}
-                  aria-pressed={applyAs === 'teacher'}
+            {/* 학년 */}
+            <div className="space-y-1.5">
+              <Label htmlFor="grade-select">
+                학년 <span className="text-red-500">*</span>
+              </Label>
+              {hasAutoGrade ? (
+                <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-700">
+                  {profile?.grade}학년
+                  <span className="ml-auto text-xs text-zinc-400">
+                    이메일 기반
+                  </span>
+                </div>
+              ) : (
+                <Select
+                  value={gradeSelection}
+                  onValueChange={setGradeSelection}
                 >
-                  <GraduationCapIcon className="h-5 w-5" />
-                  <span className="text-sm font-semibold">선생님으로</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setApplyAs('student')}
-                  className={cn(
-                    'flex flex-col items-center gap-1 rounded-lg border px-3 py-3 text-center transition-colors',
-                    applyAs === 'student'
-                      ? 'border-zinc-900 bg-zinc-900 text-white'
-                      : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
-                  )}
-                  aria-pressed={applyAs === 'student'}
-                >
-                  <UsersIcon className="h-5 w-5" />
-                  <span className="text-sm font-semibold">일반 사용자로</span>
-                </button>
+                  <SelectTrigger id="grade-select" className="h-9 w-full">
+                    <SelectValue placeholder="학년을 선택해주세요" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {GRADE_OPTIONS.map((g) => (
+                      <SelectItem key={g.value} value={g.value}>
+                        {g.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+              {needsManualGrade && (
+                <p className="text-[11px] text-zinc-500">
+                  학번 형식이 아닌 이메일이라 자동 판별되지 않았어요. 학년을 직접
+                  선택해주세요. 학교 학생이 아닌 경우 &quot;해당 없음&quot;을
+                  선택하세요.
+                </p>
+              )}
+            </div>
+
+            {/* 반 (해당 없음일 땐 숨김) */}
+            {classRequired && (
+              <div className="space-y-1.5">
+                <Label htmlFor="class-select">
+                  반 <span className="text-red-500">*</span>
+                </Label>
+                <Select value={classNumber} onValueChange={setClassNumber}>
+                  <SelectTrigger id="class-select" className="h-9 w-full">
+                    <SelectValue placeholder="반을 선택해주세요" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CLASS_OPTIONS.map((c) => (
+                      <SelectItem key={c} value={String(c)}>
+                        {c}반
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
-            {applyAs === 'student' ? (
-              <>
-                <div className="space-y-1.5">
-                  <Label>학년</Label>
-                  <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-700">
-                    {profile?.grade
-                      ? `${profile.grade}학년`
-                      : '자동 판별 실패 (관리자에게 문의)'}
-                    <span className="ml-auto text-xs text-zinc-400">
-                      이메일 기반
-                    </span>
-                  </div>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="class-select">
-                    반 <span className="text-red-500">*</span>
-                  </Label>
-                  <Select value={classNumber} onValueChange={setClassNumber}>
-                    <SelectTrigger id="class-select" className="w-full h-9">
-                      <SelectValue placeholder="반을 선택해주세요" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CLASS_OPTIONS.map((c) => (
-                        <SelectItem key={c} value={String(c)}>
-                          {c}반
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>반장 / 부반장이신가요?</Label>
-                  <div className="grid grid-cols-1 gap-2">
-                    {LEADER_OPTIONS.map((opt) => {
-                      const active = leaderChoice === opt.value
-                      return (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => setLeaderChoice(opt.value)}
-                          className={cn(
-                            'flex items-start justify-between gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors',
-                            active
-                              ? 'border-zinc-900 bg-zinc-900 text-white'
-                              : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
-                          )}
-                          aria-pressed={active}
-                        >
-                          <div>
-                            <div className="text-sm font-semibold">
-                              {opt.label}
-                            </div>
-                            <div className="text-xs opacity-70">
-                              {opt.hint}
-                            </div>
+            {/* 반장/부반장 (반이 필요한 경우만) */}
+            {classRequired && (
+              <div className="space-y-2">
+                <Label>반장 / 부반장이신가요?</Label>
+                <div className="grid grid-cols-1 gap-2">
+                  {LEADER_OPTIONS.map((opt) => {
+                    const active = leaderChoice === opt.value
+                    return (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setLeaderChoice(opt.value)}
+                        className={cn(
+                          'flex items-start justify-between gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors',
+                          active
+                            ? 'border-zinc-900 bg-zinc-900 text-white'
+                            : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
+                        )}
+                        aria-pressed={active}
+                      >
+                        <div>
+                          <div className="text-sm font-semibold">
+                            {opt.label}
                           </div>
-                          <span
-                            className={cn(
-                              'mt-1 h-4 w-4 shrink-0 rounded-full border-2',
-                              active
-                                ? 'border-white bg-white'
-                                : 'border-zinc-300'
-                            )}
-                          />
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {leaderChoice !== 'none' && (
-                    <p className="text-xs text-amber-600">
-                      반장/부반장은 관리자 승인 후 반 공지를 올릴 수 있어요.
-                    </p>
-                  )}
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-800">
-                  선생님 계정은 관리자 승인 후 활성화돼요. 승인 전까지는 일반
-                  사용자 권한으로 앱을 사용할 수 있어요.
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="t-subject">
-                    담당 과목 <span className="text-red-500">*</span>
-                  </Label>
-                  <Select value={tSubject} onValueChange={setTSubject}>
-                    <SelectTrigger id="t-subject" className="w-full h-9">
-                      <SelectValue placeholder="과목 선택" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TEACHER_SUBJECTS.map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {s}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>
-                    담당 학년 <span className="text-red-500">*</span>
-                  </Label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {GRADES.map((g) => {
-                      const active = tGrades.includes(g)
-                      return (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => toggleGrade(g)}
+                          <div className="text-xs opacity-70">{opt.hint}</div>
+                        </div>
+                        <span
                           className={cn(
-                            'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
+                            'mt-1 h-4 w-4 shrink-0 rounded-full border-2',
                             active
-                              ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
-                              : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
+                              ? 'border-white bg-white'
+                              : 'border-zinc-300'
                           )}
-                          aria-pressed={active}
-                        >
-                          {g}학년
-                        </button>
-                      )
-                    })}
-                  </div>
+                        />
+                      </button>
+                    )
+                  })}
                 </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="t-office">
-                    교과 연구실 위치 <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="t-office"
-                    value={tOffice}
-                    onChange={(e) => setTOffice(e.target.value)}
-                    placeholder="예: 3층 수학교과연구실"
-                  />
-                </div>
-              </>
+                {leaderChoice !== 'none' && (
+                  <p className="text-xs text-amber-600">
+                    반장/부반장은 관리자 승인 후 반 공지를 올릴 수 있어요.
+                  </p>
+                )}
+              </div>
             )}
 
             <Button
               onClick={handleSubmit}
               disabled={!canSubmit}
-              className={cn(
-                'w-full h-10',
-                applyAs === 'teacher' && 'bg-indigo-600 hover:bg-indigo-700'
-              )}
+              className="h-10 w-full rounded-lg bg-zinc-900 text-white hover:bg-zinc-800"
               size="lg"
             >
               {submitting ? (
@@ -372,8 +256,6 @@ export default function OnboardingPage() {
                   <Loader2Icon className="h-4 w-4 animate-spin" />
                   <span className="ml-1">저장 중…</span>
                 </>
-              ) : applyAs === 'teacher' ? (
-                '선생님 신청'
               ) : (
                 '시작하기'
               )}
