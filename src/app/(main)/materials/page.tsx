@@ -386,33 +386,33 @@ export default function MaterialsPage() {
   return (
     <div className="p-4 space-y-4">
       <div className="space-y-3">
-        <h1 className="text-2xl font-bold text-slate-900">수업 자료</h1>
+        <h1 className="text-2xl font-bold text-zinc-900">수업 자료</h1>
 
-        <div className="flex w-full rounded-lg bg-slate-100 p-1">
+        <div className="inline-flex w-full items-center rounded-lg border border-zinc-200 bg-white p-0.5">
           <button
             type="button"
             onClick={() => setViewMode('all')}
             className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-[13px] font-medium transition-colors',
               viewMode === 'all'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-zinc-900 text-white'
+                : 'text-zinc-500 hover:text-zinc-800'
             )}
           >
-            <LayoutGridIcon className="h-4 w-4" />
+            <LayoutGridIcon className="h-3.5 w-3.5" />
             전체 보기
           </button>
           <button
             type="button"
             onClick={() => setViewMode('by-teacher')}
             className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+              'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-[13px] font-medium transition-colors',
               viewMode === 'by-teacher'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-slate-600 hover:text-slate-900'
+                ? 'bg-zinc-900 text-white'
+                : 'text-zinc-500 hover:text-zinc-800'
             )}
           >
-            <UsersIcon className="h-4 w-4" />
+            <UsersIcon className="h-3.5 w-3.5" />
             선생님별
           </button>
         </div>
@@ -436,7 +436,7 @@ export default function MaterialsPage() {
           </Select>
 
           <div className="relative flex-1">
-            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
             <Input
               type="search"
               placeholder="제목으로 검색"
@@ -467,15 +467,15 @@ export default function MaterialsPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-slate-400">
+        <div className="flex items-center justify-center py-16 text-zinc-400">
           <Loader2Icon className="mr-2 h-5 w-5 animate-spin" />
           <span className="text-sm">불러오는 중…</span>
         </div>
       ) : viewMode === 'all' ? (
         materials.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-sm text-slate-500">등록된 자료가 없습니다</p>
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="text-sm text-zinc-500">등록된 자료가 없습니다</p>
+            <p className="mt-1 text-xs text-zinc-400">
               우측 하단 버튼으로 자료를 등록해보세요
             </p>
           </div>
@@ -506,10 +506,10 @@ export default function MaterialsPage() {
             return (
               <section key={subj} className="space-y-3">
                 <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-slate-800">
+                  <h2 className="text-sm font-semibold text-zinc-800">
                     {subj}
                   </h2>
-                  <span className="text-xs text-slate-400">
+                  <span className="text-xs text-zinc-400">
                     {applicable.length}명
                   </span>
                 </div>
@@ -538,8 +538,8 @@ export default function MaterialsPage() {
           {commonMaterials.length > 0 && subjectFilter === 'all' && (
             <section className="space-y-3">
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-slate-800">공통</h2>
-                <span className="text-xs text-slate-400">
+                <h2 className="text-sm font-semibold text-zinc-800">공통</h2>
+                <span className="text-xs text-zinc-400">
                   교과서 · 공통자료
                 </span>
               </div>
@@ -571,7 +571,7 @@ export default function MaterialsPage() {
           }) &&
             commonMaterials.length === 0 && (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="text-sm text-slate-500">등록된 자료가 없어요</p>
+                <p className="text-sm text-zinc-500">등록된 자료가 없어요</p>
               </div>
             )}
         </div>
@@ -581,9 +581,9 @@ export default function MaterialsPage() {
         onClick={openDialog}
         size="lg"
         className={cn(
-          'fixed bottom-24 right-4 z-40 h-14 rounded-full px-5 shadow-lg',
-          isAdmin && 'bg-red-600 hover:bg-red-700',
-          isTeacher && !isAdmin && 'bg-purple-600 hover:bg-purple-700'
+          'fixed bottom-20 right-4 z-40 h-12 rounded-lg border border-zinc-900 bg-zinc-900 px-4 text-white shadow-lg shadow-zinc-900/20 hover:bg-zinc-800',
+          isAdmin && 'border-red-600 bg-red-600 hover:bg-red-700 shadow-red-600/20',
+          isTeacher && !isAdmin && 'border-indigo-600 bg-indigo-600 hover:bg-indigo-700 shadow-indigo-600/20'
         )}
       >
         <PlusIcon className="h-5 w-5" />
@@ -634,10 +634,10 @@ function SubjectChip({
       type="button"
       onClick={onClick}
       className={cn(
-        'shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors',
+        'shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors',
         active
-          ? 'bg-blue-600 text-white'
-          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          ? 'border-zinc-900 bg-zinc-900 text-white'
+          : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-900'
       )}
     >
       {label}
@@ -659,30 +659,27 @@ function TeacherSection({
   onDelete: (m: MaterialWithTeacher) => void
 }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-3">
+    <div className="rounded-lg border border-zinc-200 bg-white p-3">
       <div className="mb-2 flex items-center gap-2">
         <Avatar className="h-8 w-8">
           {teacher.photo_url ? (
             <AvatarImage src={teacher.photo_url} alt={teacher.name} />
           ) : null}
-          <AvatarFallback className="bg-purple-100 text-xs font-semibold text-purple-700">
+          <AvatarFallback className="bg-zinc-100 text-xs font-semibold text-zinc-700">
             {teacher.name.trim().slice(0, 1) || '?'}
           </AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
-            <span className="text-sm font-semibold text-slate-900">
+            <span className="text-sm font-semibold text-zinc-900">
               {teacher.name} 선생님
             </span>
-            <Badge
-              variant="secondary"
-              className="h-4 bg-purple-50 px-1.5 text-[10px] text-purple-700"
-            >
+            <span className="inline-flex h-4 items-center rounded-md border border-indigo-200 bg-indigo-50 px-1.5 text-[10px] font-medium text-indigo-700">
               {teacher.subject}
-            </Badge>
+            </span>
           </div>
         </div>
-        <span className="text-xs text-slate-400">{materials.length}개</span>
+        <span className="text-xs text-zinc-400">{materials.length}개</span>
       </div>
       <div className="grid grid-cols-1 gap-2">
         {materials.map((m) => (
@@ -791,7 +788,7 @@ function UploadDialog(props: UploadDialogProps) {
             <div className="space-y-1.5">
               <Label htmlFor="material-subject">과목</Label>
               {role === 'teacher' ? (
-                <div className="flex h-9 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700">
+                <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-700">
                   {formSubject}
                 </div>
               ) : (
@@ -885,7 +882,7 @@ function UploadDialog(props: UploadDialogProps) {
                 <SelectContent>
                   <SelectItem value="none">공통 · 교과서</SelectItem>
                   {teachers.length === 0 ? (
-                    <div className="px-2 py-1.5 text-xs text-slate-400">
+                    <div className="px-2 py-1.5 text-xs text-zinc-400">
                       등록된 선생님이 없습니다
                     </div>
                   ) : (
@@ -913,7 +910,7 @@ function UploadDialog(props: UploadDialogProps) {
               className="h-auto py-1.5"
             />
             {formFile && (
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-zinc-500">
                 {formFile.name} · {(formFile.size / 1024 / 1024).toFixed(2)}MB
               </p>
             )}

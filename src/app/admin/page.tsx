@@ -69,9 +69,18 @@ function LeaderTypeChip({ type }: { type: ClassLeaderType | null }) {
 
 function EventTypeChip({ type }: { type: Event['event_type'] }) {
   const map = {
-    assignment: { label: '과제', cls: 'bg-blue-100 text-blue-700' },
-    exam: { label: '시험', cls: 'bg-red-100 text-red-700' },
-    personal: { label: '개인', cls: 'bg-green-100 text-green-700' },
+    assignment: {
+      label: '과제',
+      cls: 'bg-indigo-50 text-indigo-700 border border-indigo-200',
+    },
+    exam: {
+      label: '시험',
+      cls: 'bg-red-50 text-red-700 border border-red-200',
+    },
+    personal: {
+      label: '개인',
+      cls: 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+    },
   }
   const meta = map[type]
   return (
@@ -82,14 +91,14 @@ function EventTypeChip({ type }: { type: Event['event_type'] }) {
 function ScopeChip({ scope, event }: { scope: Event['scope']; event: Event }) {
   if (scope === 'class') {
     return (
-      <Badge variant="outline" className="border-slate-300">
+      <Badge variant="outline" className="border-zinc-300">
         {event.grade ?? '?'}학년 {event.class_number ?? '?'}반
       </Badge>
     )
   }
   if (scope === 'grade') {
     return (
-      <Badge variant="outline" className="border-slate-300">
+      <Badge variant="outline" className="border-zinc-300">
         {event.grade ?? '?'}학년 전체
       </Badge>
     )
@@ -372,8 +381,8 @@ export default function AdminDashboardPage() {
   return (
     <div className="space-y-4 p-4">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">승인 대시보드</h1>
-        <p className="text-sm text-slate-500">
+        <h1 className="text-2xl font-bold text-zinc-900">승인 대시보드</h1>
+        <p className="text-sm text-zinc-500">
           반장 · 자료 · 공지 승인 요청을 처리하세요.
         </p>
       </div>
@@ -417,16 +426,16 @@ export default function AdminDashboardPage() {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <UserIcon className="h-4 w-4 text-slate-400" />
-                      <span className="font-semibold text-slate-900">
+                      <UserIcon className="h-4 w-4 text-zinc-400" />
+                      <span className="font-semibold text-zinc-900">
                         {a.name}
                       </span>
                       <LeaderTypeChip type={a.class_leader_type} />
                     </div>
-                    <div className="mt-0.5 text-xs text-slate-500">
+                    <div className="mt-0.5 text-xs text-zinc-500">
                       {a.email}
                     </div>
-                    <div className="mt-1 text-xs text-slate-700">
+                    <div className="mt-1 text-xs text-zinc-700">
                       {a.grade ?? '?'}학년 {a.class_number ?? '?'}반
                     </div>
                   </div>
@@ -466,19 +475,19 @@ export default function AdminDashboardPage() {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
-                      <UserIcon className="h-4 w-4 text-purple-500" />
-                      <span className="font-semibold text-slate-900">
+                      <UserIcon className="h-4 w-4 text-indigo-500" />
+                      <span className="font-semibold text-zinc-900">
                         {a.name}
                       </span>
-                      <Badge className="bg-purple-100 text-purple-700 hover:bg-purple-100">
+                      <span className="inline-flex h-5 items-center rounded-md border border-indigo-200 bg-indigo-50 px-1.5 text-[11px] font-medium text-indigo-700">
                         선생님 신청
-                      </Badge>
+                      </span>
                     </div>
-                    <div className="mt-0.5 text-xs text-slate-500">
+                    <div className="mt-0.5 text-xs text-zinc-500">
                       {a.email}
                     </div>
                     {a.teacher_profile && (
-                      <div className="mt-1.5 space-y-0.5 rounded-md bg-purple-50 px-2 py-1.5 text-xs text-slate-700">
+                      <div className="mt-1.5 space-y-0.5 rounded-md border border-indigo-100 bg-indigo-50 px-2 py-1.5 text-xs text-zinc-700">
                         <div>
                           <strong className="font-semibold">과목:</strong>{' '}
                           {a.teacher_profile.subject}
@@ -532,7 +541,7 @@ export default function AdminDashboardPage() {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-semibold text-slate-900">
+                      <span className="font-semibold text-zinc-900">
                         {m.title}
                       </span>
                       <Badge variant="secondary" className="text-[10px]">
@@ -545,7 +554,7 @@ export default function AdminDashboardPage() {
                         {m.file_type}
                       </Badge>
                     </div>
-                    <div className="mt-1 text-xs text-slate-500">
+                    <div className="mt-1 text-xs text-zinc-500">
                       {m.uploader?.name ?? '알 수 없음'} ·{' '}
                       {m.uploader?.email ?? ''}
                     </div>
@@ -553,7 +562,7 @@ export default function AdminDashboardPage() {
                       href={m.file_url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-1 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                      className="mt-1 inline-flex items-center gap-1 text-xs text-indigo-600 hover:underline"
                     >
                       <ExternalLinkIcon className="h-3 w-3" />
                       파일 확인
@@ -595,22 +604,22 @@ export default function AdminDashboardPage() {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-semibold text-slate-900">
+                      <span className="font-semibold text-zinc-900">
                         {e.title}
                       </span>
                       <EventTypeChip type={e.event_type} />
                       <ScopeChip scope={e.scope} event={e} />
                     </div>
-                    <div className="mt-1 text-xs text-slate-700">
+                    <div className="mt-1 text-xs text-zinc-700">
                       {e.event_date}
                       {e.subject ? ` · ${e.subject}` : ''}
                     </div>
                     {e.memo && (
-                      <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-slate-600">
+                      <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-zinc-600">
                         {e.memo}
                       </p>
                     )}
-                    <div className="mt-1 text-xs text-slate-500">
+                    <div className="mt-1 text-xs text-zinc-500">
                       {e.author?.name ?? '알 수 없음'} ·{' '}
                       {e.author?.email ?? ''}
                     </div>
@@ -649,8 +658,8 @@ function CountBadge({ n }: { n: number }) {
     <span
       className={
         n > 0
-          ? 'rounded-full bg-red-100 px-1.5 text-[10px] font-semibold text-red-700'
-          : 'rounded-full bg-slate-100 px-1.5 text-[10px] font-semibold text-slate-500'
+          ? 'inline-flex h-4 min-w-4 items-center justify-center rounded-md border border-red-200 bg-red-50 px-1 text-[10px] font-semibold text-red-600'
+          : 'inline-flex h-4 min-w-4 items-center justify-center rounded-md border border-zinc-200 bg-white px-1 text-[10px] font-semibold text-zinc-500'
       }
     >
       {n}
@@ -660,7 +669,7 @@ function CountBadge({ n }: { n: number }) {
 
 function LoadingState() {
   return (
-    <div className="flex items-center justify-center py-10 text-slate-400">
+    <div className="flex items-center justify-center py-10 text-zinc-400">
       <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
       <span className="text-sm">불러오는 중…</span>
     </div>
@@ -669,7 +678,7 @@ function LoadingState() {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">
+    <div className="rounded-lg border border-dashed border-zinc-200 py-10 text-center text-sm text-zinc-400">
       {message}
     </div>
   )

@@ -54,33 +54,33 @@ type StatusMeta = {
 const STATUS_META: Record<TeacherStatus, StatusMeta> = {
   available: {
     label: '자리 있음',
-    dot: 'bg-green-500',
-    chipBg: 'bg-green-50',
-    chipText: 'text-green-700',
+    dot: 'bg-emerald-500',
+    chipBg: 'bg-emerald-50 border border-emerald-200',
+    chipText: 'text-emerald-700',
   },
   in_class: {
     label: '수업 중',
-    dot: 'bg-yellow-500',
-    chipBg: 'bg-yellow-50',
-    chipText: 'text-yellow-700',
+    dot: 'bg-amber-500',
+    chipBg: 'bg-amber-50 border border-amber-200',
+    chipText: 'text-amber-700',
   },
   meeting: {
     label: '회의 중',
     dot: 'bg-red-500',
-    chipBg: 'bg-red-50',
+    chipBg: 'bg-red-50 border border-red-200',
     chipText: 'text-red-700',
   },
   out: {
     label: '외출',
     dot: 'bg-red-500',
-    chipBg: 'bg-red-50',
+    chipBg: 'bg-red-50 border border-red-200',
     chipText: 'text-red-700',
   },
   unknown: {
     label: '상태 미확인',
-    dot: 'bg-slate-300',
-    chipBg: 'bg-slate-100',
-    chipText: 'text-slate-600',
+    dot: 'bg-zinc-300',
+    chipBg: 'bg-zinc-100 border border-zinc-200',
+    chipText: 'text-zinc-600',
   },
 }
 
@@ -114,20 +114,20 @@ function TeacherCard({
     <Card
       size="sm"
       onClick={onClick}
-      className="cursor-pointer transition-shadow hover:shadow-md active:scale-[0.99]"
+      className="cursor-pointer border border-zinc-200 shadow-none transition-colors hover:border-zinc-300 active:scale-[0.995]"
     >
       <div className="flex items-center gap-3 px-3">
         <Avatar className="h-12 w-12 shrink-0">
           {teacher.photo_url ? (
             <AvatarImage src={teacher.photo_url} alt={teacher.name} />
           ) : null}
-          <AvatarFallback className="bg-blue-100 text-base font-semibold text-blue-700">
+          <AvatarFallback className="bg-zinc-100 text-base font-semibold text-zinc-700">
             {initial(teacher.name)}
           </AvatarFallback>
         </Avatar>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="truncate font-semibold text-slate-900">
+            <h3 className="truncate font-semibold text-zinc-900">
               {teacher.name}
             </h3>
             <span
@@ -138,9 +138,9 @@ function TeacherCard({
               title={STATUS_META[teacher.current_status].label}
             />
           </div>
-          <p className="text-sm text-slate-500">{teacher.subject}</p>
+          <p className="text-sm text-zinc-500">{teacher.subject}</p>
           {teacher.office_location && (
-            <p className="mt-0.5 flex items-center gap-1 text-xs text-slate-400">
+            <p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-400">
               <MapPinIcon className="h-3 w-3" />
               {teacher.office_location}
             </p>
@@ -166,7 +166,7 @@ function ScheduleGrid({
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center py-6 text-slate-400">
+      <div className="flex items-center justify-center py-6 text-zinc-400">
         <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
         <span className="text-sm">불러오는 중…</span>
       </div>
@@ -175,7 +175,7 @@ function ScheduleGrid({
 
   if (schedules.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-200 py-6 text-center text-sm text-slate-400">
+      <div className="rounded-lg border border-dashed border-zinc-200 py-6 text-center text-sm text-zinc-400">
         등록된 시간표가 없어요
       </div>
     )
@@ -187,14 +187,14 @@ function ScheduleGrid({
       {DAY_LABELS.map((d) => (
         <div
           key={d}
-          className="py-1 text-center text-xs font-semibold text-slate-700"
+          className="py-1 text-center text-xs font-semibold text-zinc-700"
         >
           {d}
         </div>
       ))}
       {PERIODS.map((p) => (
         <Fragment key={p}>
-          <div className="flex items-center justify-center py-1 text-xs font-medium text-slate-500">
+          <div className="flex items-center justify-center py-1 text-xs font-medium text-zinc-500">
             {p}교시
           </div>
           {DAY_LABELS.map((_, dayIdx) => {
@@ -204,7 +204,9 @@ function ScheduleGrid({
                 key={dayIdx}
                 className={cn(
                   'flex min-h-11 flex-col items-center justify-center rounded-md p-1 text-center',
-                  s ? 'bg-blue-50 text-blue-900' : 'bg-slate-50'
+                  s
+                    ? 'bg-indigo-50 text-indigo-900 border border-indigo-100'
+                    : 'bg-zinc-50 border border-zinc-100'
                 )}
               >
                 {s && (
@@ -212,7 +214,7 @@ function ScheduleGrid({
                     <span className="text-[11px] font-semibold leading-tight">
                       {s.classroom}
                     </span>
-                    <span className="text-[9px] leading-tight text-blue-700/70">
+                    <span className="text-[9px] leading-tight text-indigo-700/70">
                       {s.grade}학년 {s.class_number}반
                     </span>
                   </>
@@ -303,7 +305,7 @@ function TeacherDetailDialog({
               {teacher.photo_url ? (
                 <AvatarImage src={teacher.photo_url} alt={teacher.name} />
               ) : null}
-              <AvatarFallback className="bg-blue-100 text-xl font-bold text-blue-700">
+              <AvatarFallback className="bg-zinc-100 text-xl font-bold text-zinc-700">
                 {initial(teacher.name)}
               </AvatarFallback>
             </Avatar>
@@ -333,14 +335,14 @@ function TeacherDetailDialog({
 
         <div className="space-y-4">
           {teacher.office_location && (
-            <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-700">
-              <MapPinIcon className="h-4 w-4 shrink-0 text-slate-500" />
+            <div className="flex items-center gap-2 rounded-lg bg-zinc-50 px-3 py-2 text-sm text-zinc-700">
+              <MapPinIcon className="h-4 w-4 shrink-0 text-zinc-500" />
               <span>{teacher.office_location}</span>
             </div>
           )}
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold text-slate-800">
+            <h3 className="mb-2 text-sm font-semibold text-zinc-800">
               이번 주 시간표
             </h3>
             <ScheduleGrid schedules={schedules} loading={loading} />
@@ -348,23 +350,23 @@ function TeacherDetailDialog({
 
           <div>
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-800">
-                <FileTextIcon className="h-4 w-4 text-purple-500" />
+              <h3 className="flex items-center gap-1.5 text-sm font-semibold text-zinc-800">
+                <FileTextIcon className="h-4 w-4 text-indigo-500" />
                 이 선생님의 자료
               </h3>
               {!materialsLoading && materials.length > 0 && (
-                <span className="text-xs text-slate-400">
+                <span className="text-xs text-zinc-400">
                   총 {materials.length}개
                 </span>
               )}
             </div>
             {materialsLoading ? (
-              <div className="flex items-center justify-center py-4 text-slate-400">
+              <div className="flex items-center justify-center py-4 text-zinc-400">
                 <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
                 <span className="text-xs">불러오는 중…</span>
               </div>
             ) : materials.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-slate-200 py-4 text-center text-xs text-slate-400">
+              <div className="rounded-lg border border-dashed border-zinc-200 py-4 text-center text-xs text-zinc-400">
                 아직 등록된 자료가 없어요
               </div>
             ) : (
@@ -378,7 +380,7 @@ function TeacherDetailDialog({
                       >
                         {grade}학년
                       </Badge>
-                      <span className="text-[10px] text-slate-400">
+                      <span className="text-[10px] text-zinc-400">
                         {list.length}개
                       </span>
                     </div>
@@ -650,10 +652,10 @@ export default function TeachersPage() {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-2xl font-bold text-slate-900">선생님 찾기</h1>
+      <h1 className="text-2xl font-bold text-zinc-900">선생님 찾기</h1>
 
       <div className="relative">
-        <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
         <Input
           type="search"
           placeholder="이름 또는 과목으로 검색"
@@ -664,15 +666,15 @@ export default function TeachersPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-16 text-slate-400">
+        <div className="flex items-center justify-center py-16 text-zinc-400">
           <Loader2Icon className="mr-2 h-5 w-5 animate-spin" />
           <span className="text-sm">불러오는 중…</span>
         </div>
       ) : teachers.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <p className="text-sm text-slate-500">선생님 정보가 없어요</p>
+          <p className="text-sm text-zinc-500">선생님 정보가 없어요</p>
           {debouncedSearch && (
-            <p className="mt-1 text-xs text-slate-400">
+            <p className="mt-1 text-xs text-zinc-400">
               검색어를 다시 확인해보세요
             </p>
           )}

@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangleIcon,
   BellIcon,
+  CalendarIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
   EyeIcon,
   EyeOffIcon,
+  ListIcon,
   Loader2Icon,
   PencilIcon,
   PlusIcon,
@@ -68,27 +70,27 @@ type EventTypeMeta = {
 const EVENT_TYPE_META: Record<EventType, EventTypeMeta> = {
   assignment: {
     label: '과제',
-    dot: 'bg-blue-500',
-    chipBg: 'bg-blue-50',
-    chipText: 'text-blue-700',
-    cardBg: 'bg-blue-50',
-    cardBorder: 'border-blue-200',
+    dot: 'bg-indigo-500',
+    chipBg: 'bg-indigo-50',
+    chipText: 'text-indigo-700 border-indigo-200',
+    cardBg: 'bg-white',
+    cardBorder: 'border-zinc-200',
   },
   exam: {
     label: '시험',
     dot: 'bg-red-500',
     chipBg: 'bg-red-50',
-    chipText: 'text-red-700',
-    cardBg: 'bg-red-50',
-    cardBorder: 'border-red-200',
+    chipText: 'text-red-600 border-red-200',
+    cardBg: 'bg-white',
+    cardBorder: 'border-zinc-200',
   },
   personal: {
     label: '개인',
-    dot: 'bg-green-500',
-    chipBg: 'bg-green-50',
-    chipText: 'text-green-700',
-    cardBg: 'bg-green-50',
-    cardBorder: 'border-green-200',
+    dot: 'bg-emerald-500',
+    chipBg: 'bg-emerald-50',
+    chipText: 'text-emerald-600 border-emerald-200',
+    cardBg: 'bg-white',
+    cardBorder: 'border-zinc-200',
   },
 }
 
@@ -161,11 +163,11 @@ function ddayLabel(eventDate: string): string {
 
 function ddayColorClass(eventDate: string): string {
   const diff = daysFromToday(eventDate)
-  if (diff < 0) return 'bg-slate-400 text-white'
-  if (diff === 0) return 'bg-red-500 text-white'
-  if (diff <= 3) return 'bg-orange-500 text-white'
-  if (diff <= 7) return 'bg-yellow-500 text-white'
-  return 'bg-blue-500 text-white'
+  if (diff < 0) return 'bg-zinc-100 text-zinc-500 border border-zinc-200'
+  if (diff === 0) return 'bg-red-500 text-white border border-red-500'
+  if (diff <= 3) return 'bg-orange-500 text-white border border-orange-500'
+  if (diff <= 7) return 'bg-amber-100 text-amber-700 border border-amber-200'
+  return 'bg-zinc-900 text-white border border-zinc-900'
 }
 
 function formatSelectedDate(d: Date): string {
@@ -942,7 +944,7 @@ export default function CalendarPage() {
         </button>
       )}
 
-      <div className="flex w-full rounded-lg bg-slate-100 p-1">
+      <div className="inline-flex w-full items-center rounded-lg border border-zinc-200 bg-white p-0.5">
         {(['calendar', 'list'] as const).map((v) => {
           const active = view === v
           return (
@@ -951,16 +953,18 @@ export default function CalendarPage() {
               type="button"
               onClick={() => setView(v)}
               className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
+                'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-[13px] font-medium transition-colors',
                 active
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-zinc-900 text-white'
+                  : 'text-zinc-500 hover:text-zinc-800'
               )}
               aria-pressed={active}
             >
-              <span className="text-base leading-none">
-                {v === 'calendar' ? '📅' : '📋'}
-              </span>
+              {v === 'calendar' ? (
+                <CalendarIcon className="h-3.5 w-3.5" />
+              ) : (
+                <ListIcon className="h-3.5 w-3.5" />
+              )}
               <span>{v === 'calendar' ? '캘린더' : '목록'}</span>
             </button>
           )
@@ -968,18 +972,34 @@ export default function CalendarPage() {
       </div>
 
       <div className="flex items-center justify-between">
-        <Button variant="ghost" size="icon" onClick={goPrev} aria-label="이전 달">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={goPrev}
+          aria-label="이전 달"
+          className="text-zinc-500 hover:text-zinc-900"
+        >
           <ChevronLeftIcon />
         </Button>
         <button
           type="button"
           onClick={goToday}
-          className="flex flex-col items-center leading-tight"
+          className="group flex flex-col items-center leading-tight"
         >
-          <h1 className="text-lg font-bold text-slate-900">{monthTitle}</h1>
-          <span className="text-[10px] text-slate-400">오늘로 이동</span>
+          <h1 className="text-[17px] font-semibold tracking-tight text-zinc-900">
+            {monthTitle}
+          </h1>
+          <span className="text-[10px] font-medium text-zinc-400 group-hover:text-zinc-600">
+            오늘로 이동
+          </span>
         </button>
-        <Button variant="ghost" size="icon" onClick={goNext} aria-label="다음 달">
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          onClick={goNext}
+          aria-label="다음 달"
+          className="text-zinc-500 hover:text-zinc-900"
+        >
           <ChevronRightIcon />
         </Button>
       </div>
@@ -988,7 +1008,7 @@ export default function CalendarPage() {
         <button
           type="button"
           onClick={() => setShowCompleted((v) => !v)}
-          className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-slate-500 hover:bg-slate-100"
+          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
         >
           {showCompleted ? (
             <>
@@ -1006,16 +1026,16 @@ export default function CalendarPage() {
 
       {view === 'calendar' ? (
         <>
-          <div>
-            <div className="grid grid-cols-7 mb-1">
+          <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
+            <div className="grid grid-cols-7 border-b border-zinc-200 bg-zinc-50/60">
               {WEEKDAYS.map((w, i) => (
                 <div
                   key={w}
                   className={cn(
-                    'text-center text-[11px] font-medium py-1',
-                    i === 0 && 'text-red-500',
-                    i === 6 && 'text-blue-500',
-                    i !== 0 && i !== 6 && 'text-slate-500'
+                    'py-1.5 text-center text-[10px] font-semibold uppercase tracking-widest',
+                    i === 0 && 'text-red-400',
+                    i === 6 && 'text-indigo-400',
+                    i !== 0 && i !== 6 && 'text-zinc-400'
                   )}
                 >
                   {w}
@@ -1023,8 +1043,8 @@ export default function CalendarPage() {
               ))}
             </div>
 
-            <div className="grid grid-cols-7 gap-1">
-              {gridDays.map((d) => {
+            <div className="grid grid-cols-7">
+              {gridDays.map((d, idx) => {
                 const key = toDateKey(d)
                 const inMonth = d.getMonth() === currentMonth.getMonth()
                 const isToday = isSameDay(d, today)
@@ -1036,6 +1056,9 @@ export default function CalendarPage() {
                 const typesInDay = new Set(visibleDay.map((e) => e.event_type))
                 const dayOfWeek = d.getDay()
                 const hasMemo = memoByDate.has(key)
+                const col = idx % 7
+                const row = Math.floor(idx / 7)
+                const rows = Math.ceil(gridDays.length / 7)
 
                 return (
                   <button
@@ -1043,33 +1066,43 @@ export default function CalendarPage() {
                     type="button"
                     onClick={() => setSelectedDate(startOfDay(d))}
                     className={cn(
-                      'relative aspect-square flex flex-col items-center justify-start rounded-lg p-1 text-sm transition-colors',
-                      'hover:bg-slate-100',
-                      isSelected && 'bg-blue-100 hover:bg-blue-100',
-                      isToday && 'ring-2 ring-blue-500 ring-inset',
-                      !inMonth && 'text-slate-300',
+                      'relative flex aspect-square flex-col items-center justify-start p-1 text-[13px] transition-colors',
+                      col !== 6 && 'border-r border-zinc-100',
+                      row !== rows - 1 && 'border-b border-zinc-100',
+                      'hover:bg-zinc-50',
+                      isSelected && 'bg-indigo-50 hover:bg-indigo-50',
+                      !inMonth && 'text-zinc-300',
                       inMonth && dayOfWeek === 0 && 'text-red-500',
-                      inMonth && dayOfWeek === 6 && 'text-blue-500',
+                      inMonth && dayOfWeek === 6 && 'text-indigo-500',
                       inMonth &&
                         dayOfWeek !== 0 &&
                         dayOfWeek !== 6 &&
-                        'text-slate-800',
-                      isSelected && 'font-semibold text-blue-900'
+                        'text-zinc-800',
+                      isSelected && 'font-semibold text-indigo-700'
                     )}
                   >
-                    <span className="mt-0.5">{d.getDate()}</span>
+                    <span
+                      className={cn(
+                        'mt-1 flex h-6 w-6 items-center justify-center rounded-md font-medium tabular-nums',
+                        isToday
+                          ? 'bg-zinc-900 text-white'
+                          : isSelected
+                            ? 'text-indigo-700'
+                            : ''
+                      )}
+                    >
+                      {d.getDate()}
+                    </span>
                     {hasMemo && (
-                      <span className="absolute right-0.5 top-0.5 text-[9px] leading-none">
-                        📝
-                      </span>
+                      <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-indigo-400" />
                     )}
-                    <div className="mt-auto mb-0.5 flex h-1.5 items-center gap-0.5">
+                    <div className="mt-auto mb-1 flex h-1 items-center gap-0.5">
                       {EVENT_TYPE_ORDER.map((t) =>
                         typesInDay.has(t) ? (
                           <span
                             key={t}
                             className={cn(
-                              'h-1.5 w-1.5 rounded-full',
+                              'h-1 w-1 rounded-full',
                               EVENT_TYPE_META[t].dot
                             )}
                           />
@@ -1095,10 +1128,10 @@ export default function CalendarPage() {
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-slate-800">
+              <h2 className="text-sm font-semibold text-zinc-800">
                 {formatSelectedDate(selectedDate)}
               </h2>
-              <span className="text-xs text-slate-400">
+              <span className="text-xs text-zinc-400">
                 {selectedEvents.length > 0 ? `${selectedEvents.length}개` : ''}
               </span>
             </div>
@@ -1139,11 +1172,11 @@ export default function CalendarPage() {
         </>
       ) : (
         <>
-          <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2">
-            <span className="text-sm font-semibold text-slate-800">
+          <div className="flex items-center justify-between rounded-lg bg-zinc-50 px-3 py-2">
+            <span className="text-sm font-semibold text-zinc-800">
               {monthTitle}
             </span>
-            <span className="text-xs text-slate-500">
+            <span className="text-xs text-zinc-500">
               {showCompleted ? '완료 ' : ''}총 {visibleMonthEvents.length}개
             </span>
           </div>
@@ -1166,7 +1199,7 @@ export default function CalendarPage() {
                         )}
                       />
                       {LIST_CATEGORY_LABELS[t]}
-                      <span className="text-xs text-slate-500">
+                      <span className="text-xs text-zinc-500">
                         {monthEventsByType[t].length}
                       </span>
                     </span>
@@ -1197,7 +1230,7 @@ export default function CalendarPage() {
       <Button
         onClick={openAddDialog}
         size="lg"
-        className="fixed bottom-24 right-4 z-40 h-14 rounded-full px-5 shadow-lg"
+        className="fixed bottom-20 right-4 z-40 h-12 rounded-lg border border-zinc-900 bg-zinc-900 px-4 text-white shadow-lg shadow-zinc-900/20 hover:bg-zinc-800"
       >
         <PlusIcon className="h-5 w-5" />
         <span className="ml-1 text-sm font-semibold">일정 추가</span>
@@ -1225,7 +1258,7 @@ export default function CalendarPage() {
                 required
               />
               {autoType && formMode === 'add' && (
-                <p className="text-[11px] text-slate-400">
+                <p className="text-[11px] text-zinc-400">
                   “수행”/“과제”/“숙제” 키워드를 감지하면 종류가 자동으로 바뀌어요.
                 </p>
               )}
@@ -1279,7 +1312,7 @@ export default function CalendarPage() {
                 <button
                   type="button"
                   onClick={toggleCustomTime}
-                  className="text-xs text-blue-600 hover:underline"
+                  className="text-xs text-indigo-600 hover:underline"
                 >
                   {formCustomTime ? '교시로 선택' : '직접 입력'}
                 </button>
@@ -1350,8 +1383,8 @@ export default function CalendarPage() {
                       className={cn(
                         'flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-left transition-colors',
                         active
-                          ? 'border-blue-500 bg-blue-50 text-blue-900'
-                          : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50',
+                          ? 'border-zinc-900 bg-zinc-900 text-white'
+                          : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50',
                         !available && 'cursor-not-allowed opacity-50'
                       )}
                       aria-pressed={active}
@@ -1360,7 +1393,7 @@ export default function CalendarPage() {
                         <div className="text-sm font-semibold">
                           {SCOPE_META[s].label}
                         </div>
-                        <div className="text-[11px] text-slate-500">
+                        <div className="text-[11px] text-zinc-500">
                           {SCOPE_META[s].hint}
                         </div>
                       </div>
@@ -1368,8 +1401,8 @@ export default function CalendarPage() {
                         className={cn(
                           'mt-1 h-4 w-4 shrink-0 rounded-full border-2',
                           active
-                            ? 'border-blue-500 bg-blue-500'
-                            : 'border-slate-300'
+                            ? 'border-zinc-900 bg-zinc-900'
+                            : 'border-zinc-300'
                         )}
                       />
                     </button>
@@ -1379,7 +1412,7 @@ export default function CalendarPage() {
 
               {(isAdmin || isTeacher) &&
                 (formScope === 'class' || formScope === 'grade') && (
-                  <div className="space-y-2 rounded-lg bg-slate-50 p-2">
+                  <div className="space-y-2 rounded-lg bg-zinc-50 p-2">
                     <div className="space-y-1">
                       <Label htmlFor="target-grade" className="text-xs">
                         대상 학년
@@ -1425,8 +1458,8 @@ export default function CalendarPage() {
                                 className={cn(
                                   'rounded-md py-1 text-xs font-medium transition-colors',
                                   on
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-white text-slate-600 hover:bg-slate-100'
+                                    ? 'bg-zinc-900 text-white border border-zinc-900'
+                                    : 'bg-white text-zinc-600 border border-zinc-200 hover:bg-zinc-50'
                                 )}
                                 aria-pressed={on}
                               >
@@ -1488,7 +1521,7 @@ export default function CalendarPage() {
 
 function LoadingSpinner() {
   return (
-    <div className="flex items-center justify-center py-8 text-slate-400">
+    <div className="flex items-center justify-center py-8 text-zinc-400">
       <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />
       <span className="text-sm">불러오는 중…</span>
     </div>
@@ -1497,7 +1530,7 @@ function LoadingSpinner() {
 
 function EmptyBox({ message }: { message: string }) {
   return (
-    <div className="rounded-lg border border-dashed border-slate-200 py-8 text-center text-sm text-slate-400">
+    <div className="rounded-lg border border-dashed border-zinc-200 py-8 text-center text-sm text-zinc-400">
       {message}
     </div>
   )
@@ -1570,7 +1603,7 @@ function MemoSection({
           </div>
         </div>
       ) : memo ? (
-        <p className="whitespace-pre-wrap text-sm text-slate-800">
+        <p className="whitespace-pre-wrap text-sm text-zinc-800">
           {memo.content}
         </p>
       ) : (
@@ -1609,8 +1642,8 @@ function ScopeChip({
       className={cn(
         'h-4 px-1.5 text-[10px]',
         isTeacherNotice
-          ? 'border-purple-300 bg-purple-50 text-purple-700'
-          : 'border-slate-300 bg-white/70 text-slate-600'
+          ? 'border-indigo-200 bg-indigo-50 text-indigo-700'
+          : 'border-zinc-300 bg-white/70 text-zinc-600'
       )}
     >
       {isTeacherNotice ? `${teacherName} 선생님 공지` : label}
@@ -1638,7 +1671,7 @@ function TimeChip({ event }: { event: Event }) {
   const p = findPeriodByValue(event.period)
   if (p) {
     return (
-      <span className="flex items-center gap-1 text-[11px] text-slate-500">
+      <span className="flex items-center gap-1 text-[11px] text-zinc-500">
         <ClockIcon className="h-3 w-3" />
         {p.label}
       </span>
@@ -1648,7 +1681,7 @@ function TimeChip({ event }: { event: Event }) {
     const s = event.start_time.slice(0, 5)
     const e = event.end_time?.slice(0, 5)
     return (
-      <span className="flex items-center gap-1 text-[11px] text-slate-500">
+      <span className="flex items-center gap-1 text-[11px] text-zinc-500">
         <ClockIcon className="h-3 w-3" />
         {e ? `${s}–${e}` : s}
       </span>
@@ -1680,7 +1713,7 @@ function SelectedEventItem({
   return (
     <li
       className={cn(
-        'flex items-start gap-3 rounded-lg bg-white p-3 ring-1 ring-slate-200',
+        'flex items-start gap-3 rounded-lg border border-zinc-200 bg-white p-3',
         completed && 'opacity-60'
       )}
     >
@@ -1688,7 +1721,7 @@ function SelectedEventItem({
         type="checkbox"
         checked={completed}
         onChange={onToggleDone}
-        className="mt-1 h-4 w-4 shrink-0 rounded border-slate-300 accent-green-600"
+        className="mt-1 h-4 w-4 shrink-0 rounded border-zinc-300 accent-green-600"
         aria-label={completed ? '완료 취소' : '완료'}
       />
       <div className="min-w-0 flex-1">
@@ -1706,14 +1739,14 @@ function SelectedEventItem({
             </Badge>
             <span
               className={cn(
-                'text-sm font-semibold text-slate-900',
-                completed && 'line-through text-slate-500'
+                'text-sm font-semibold text-zinc-900',
+                completed && 'line-through text-zinc-500'
               )}
             >
               {event.title}
             </span>
             {event.subject && (
-              <span className="text-xs text-slate-500">· {event.subject}</span>
+              <span className="text-xs text-zinc-500">· {event.subject}</span>
             )}
           </div>
           <Badge
@@ -1729,7 +1762,7 @@ function SelectedEventItem({
           <ApprovalChip event={event} />
         </div>
         {event.memo && (
-          <p className="mt-1 whitespace-pre-wrap text-xs text-slate-600">
+          <p className="mt-1 whitespace-pre-wrap text-xs text-zinc-600">
             {event.memo}
           </p>
         )}
@@ -1741,7 +1774,7 @@ function SelectedEventItem({
             size="icon-sm"
             onClick={onEdit}
             aria-label="일정 수정"
-            className="text-slate-400 hover:text-blue-600"
+            className="text-zinc-400 hover:text-zinc-900"
           >
             <PencilIcon />
           </Button>
@@ -1752,7 +1785,7 @@ function SelectedEventItem({
             size="icon-sm"
             onClick={onDelete}
             aria-label="일정 삭제"
-            className="text-slate-400 hover:text-red-600"
+            className="text-zinc-400 hover:text-red-600"
           >
             <Trash2Icon />
           </Button>
@@ -1787,7 +1820,7 @@ function EventListSection({
 }) {
   if (events.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-slate-200 py-10 text-center text-sm text-slate-400">
+      <div className="rounded-lg border border-dashed border-zinc-200 py-10 text-center text-sm text-zinc-400">
         {LIST_CATEGORY_LABELS[type]} 일정이 없어요
       </div>
     )
@@ -1856,8 +1889,8 @@ function EventListItem({
         <div className="flex items-start justify-between gap-2">
           <h3
             className={cn(
-              'line-clamp-1 text-sm font-semibold text-slate-900',
-              completed && 'line-through text-slate-500'
+              'line-clamp-1 text-sm font-semibold text-zinc-900',
+              completed && 'line-through text-zinc-500'
             )}
           >
             {event.title}
@@ -1867,7 +1900,7 @@ function EventListItem({
               type="checkbox"
               checked={completed}
               onChange={onToggleDone}
-              className="mr-1 h-4 w-4 rounded border-slate-300 accent-green-600"
+              className="mr-1 h-4 w-4 rounded border-zinc-300 accent-green-600"
               aria-label={completed ? '완료 취소' : '완료'}
             />
             {canEdit && (
@@ -1877,7 +1910,7 @@ function EventListItem({
                 size="icon-xs"
                 onClick={onEdit}
                 aria-label="일정 수정"
-                className="text-slate-400 hover:text-blue-600"
+                className="text-zinc-400 hover:text-zinc-900"
               >
                 <PencilIcon />
               </Button>
@@ -1889,14 +1922,14 @@ function EventListItem({
                 size="icon-xs"
                 onClick={onDelete}
                 aria-label="일정 삭제"
-                className="text-slate-400 hover:text-red-600"
+                className="text-zinc-400 hover:text-red-600"
               >
                 <Trash2Icon />
               </Button>
             )}
           </div>
         </div>
-        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-slate-500">
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-zinc-500">
           <span>{formatFullDate(event.event_date)}</span>
           {event.subject && (
             <>
@@ -1907,7 +1940,7 @@ function EventListItem({
           <TimeChip event={event} />
         </div>
         {event.memo && (
-          <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-slate-700">
+          <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-zinc-700">
             {event.memo}
           </p>
         )}

@@ -5,7 +5,6 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   ClockIcon,
-  GraduationCapIcon,
   LogOutIcon,
   SettingsIcon,
   ShieldIcon,
@@ -26,42 +25,46 @@ import {
 import type { Teacher, TeacherStatus, User } from '@/types/database'
 
 const STATUS_DOT: Record<TeacherStatus, string> = {
-  available: 'bg-green-500',
-  in_class: 'bg-yellow-500',
+  available: 'bg-emerald-500',
+  in_class: 'bg-amber-500',
   meeting: 'bg-red-500',
   out: 'bg-red-500',
-  unknown: 'bg-slate-300',
+  unknown: 'bg-zinc-300',
 }
+
+const CHIP_BASE =
+  'inline-flex h-5 items-center rounded-md border px-1.5 text-[11px] font-medium tracking-tight'
 
 function GradeClassBadge({ profile }: { profile: User }) {
   if (profile.role === 'admin') {
     return (
-      <Badge
-        variant="secondary"
-        className="bg-red-100 text-red-700 hover:bg-red-100"
-      >
+      <span className={cn(CHIP_BASE, 'border-zinc-900 bg-zinc-900 text-white')}>
         관리자
-      </Badge>
+      </span>
     )
   }
   if (profile.role === 'teacher') {
     if (profile.teacher_status === 'pending') {
       return (
-        <Badge
-          variant="secondary"
-          className="bg-amber-100 text-amber-700 hover:bg-amber-100"
+        <span
+          className={cn(
+            CHIP_BASE,
+            'border-amber-200 bg-amber-50 text-amber-700'
+          )}
         >
           선생님 승인 대기
-        </Badge>
+        </span>
       )
     }
     return (
-      <Badge
-        variant="secondary"
-        className="bg-purple-100 text-purple-700 hover:bg-purple-100"
+      <span
+        className={cn(
+          CHIP_BASE,
+          'border-indigo-200 bg-indigo-50 text-indigo-700'
+        )}
       >
         선생님
-      </Badge>
+      </span>
     )
   }
   if (!profile.grade) return null
@@ -69,12 +72,9 @@ function GradeClassBadge({ profile }: { profile: User }) {
     ? `${profile.grade}학년 ${profile.class_number}반`
     : `${profile.grade}학년`
   return (
-    <Badge
-      variant="secondary"
-      className="bg-blue-100 text-blue-700 hover:bg-blue-100"
-    >
+    <span className={cn(CHIP_BASE, 'border-zinc-200 bg-zinc-100 text-zinc-700')}>
       {label}
-    </Badge>
+    </span>
   )
 }
 
@@ -83,27 +83,23 @@ function LeaderBadge({ profile }: { profile: User }) {
   if (profile.class_leader_status !== 'approved') return null
   const label = profile.class_leader_type === 'vice_leader' ? '부반장' : '반장'
   return (
-    <Badge
-      variant="secondary"
-      className="bg-amber-100 text-amber-700 hover:bg-amber-100"
-    >
+    <span className={cn(CHIP_BASE, 'border-amber-200 bg-amber-50 text-amber-700')}>
       {label}
-    </Badge>
+    </span>
   )
 }
 
 function TeacherMetaBadges({ teacher }: { teacher: Teacher }) {
   return (
     <>
-      <Badge
-        variant="secondary"
-        className="bg-blue-100 text-blue-700 hover:bg-blue-100"
+      <span
+        className={cn(CHIP_BASE, 'border-zinc-200 bg-zinc-100 text-zinc-700')}
       >
         {teacher.subject}
-      </Badge>
+      </span>
       <span
         className={cn(
-          'inline-block h-2 w-2 rounded-full',
+          'inline-block h-2 w-2 rounded-full ring-2 ring-white',
           STATUS_DOT[teacher.current_status] ?? STATUS_DOT.unknown
         )}
         title={teacher.current_status}
@@ -150,22 +146,23 @@ export default function Header() {
     (typeof metadata.picture === 'string' ? metadata.picture : null) ??
     null
   const initial = displayName.trim().slice(0, 1) || '?'
-  const showProfileLink = profile?.role === 'teacher'
 
   return (
-    <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
+    <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
         <Link href="/calendar" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600">
+          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900">
             <span className="text-sm font-bold text-white">B</span>
           </div>
-          <span className="font-bold text-slate-900">BIZZ</span>
+          <span className="text-[15px] font-bold tracking-tight text-zinc-900">
+            BIZZ
+          </span>
         </Link>
 
         <div className="flex items-center gap-1.5">
           {profile ? (
             <>
-              <span className="hidden max-w-[110px] truncate text-sm font-medium text-slate-700 sm:inline">
+              <span className="hidden max-w-[110px] truncate text-sm font-medium text-zinc-800 sm:inline">
                 {displayName}
               </span>
               <GradeClassBadge profile={profile} />
@@ -180,51 +177,32 @@ export default function Header() {
             <DropdownMenuTrigger
               className={cn(
                 'ml-1 rounded-full outline-none',
-                'focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1'
+                'focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2'
               )}
               aria-label="계정 메뉴"
             >
-              <Avatar>
+              <Avatar className="h-8 w-8 ring-1 ring-zinc-200">
                 {avatarUrl ? (
                   <AvatarImage src={avatarUrl} alt={displayName} />
                 ) : null}
-                <AvatarFallback className="bg-blue-100 text-sm font-semibold text-blue-700">
+                <AvatarFallback className="bg-zinc-100 text-sm font-semibold text-zinc-700">
                   {initial}
                 </AvatarFallback>
               </Avatar>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium text-slate-900">
+                <span className="text-sm font-medium text-zinc-900">
                   {displayName}
                 </span>
                 {user?.email && (
-                  <span className="truncate text-xs font-normal text-slate-500">
+                  <span className="truncate text-xs font-normal text-zinc-500">
                     {user.email}
                   </span>
                 )}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              {showProfileLink && (
-                <DropdownMenuItem asChild>
-                  <Link
-                    href="/settings"
-                    className="flex items-center gap-1.5"
-                  >
-                    <GraduationCapIcon />
-                    <span>프로필 관리</span>
-                    {myTeacher && (
-                      <span
-                        className={cn(
-                          'ml-auto inline-block h-2 w-2 rounded-full',
-                          STATUS_DOT[myTeacher.current_status]
-                        )}
-                      />
-                    )}
-                  </Link>
-                </DropdownMenuItem>
-              )}
-              {profile?.role === 'teacher' && profile.teacher_status === 'pending' && (
+              {profile?.teacher_status === 'pending' && (
                 <DropdownMenuItem disabled className="text-amber-700">
                   <ClockIcon />
                   <span>선생님 승인 대기 중</span>
@@ -234,6 +212,14 @@ export default function Header() {
                 <Link href="/settings" className="flex items-center gap-1.5">
                   <SettingsIcon />
                   <span>설정</span>
+                  {isTeacher && myTeacher && (
+                    <span
+                      className={cn(
+                        'ml-auto inline-block h-2 w-2 rounded-full',
+                        STATUS_DOT[myTeacher.current_status]
+                      )}
+                    />
+                  )}
                 </Link>
               </DropdownMenuItem>
               {isAdmin && (

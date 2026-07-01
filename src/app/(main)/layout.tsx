@@ -20,11 +20,9 @@ export default async function MainLayout({
     .single()
 
   return (
-    <div className="min-h-screen bg-slate-50 pb-20">
+    <div className="min-h-screen bg-[#FAFAFA] pb-20">
       <Header />
-      <main className="max-w-2xl mx-auto">
-        {children}
-      </main>
+      <main className="mx-auto max-w-2xl">{children}</main>
       <BottomTabBar userRole={profile?.role || 'student'} />
     </div>
   )

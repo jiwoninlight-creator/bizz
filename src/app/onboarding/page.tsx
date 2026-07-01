@@ -162,18 +162,18 @@ export default function OnboardingPage() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-50">
-        <Loader2Icon className="h-6 w-6 animate-spin text-slate-400" />
+      <div className="flex min-h-screen items-center justify-center bg-[#FAFAFA]">
+        <Loader2Icon className="h-6 w-6 animate-spin text-zinc-400" />
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+    <div className="min-h-screen bg-white p-4">
       <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-md items-center">
-        <Card className="w-full">
+        <Card className="w-full border border-zinc-200 shadow-none">
           <CardHeader>
-            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600">
+            <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-md bg-zinc-900">
               <span className="text-lg font-bold text-white">B</span>
             </div>
             <CardTitle className="text-xl">환영합니다!</CardTitle>
@@ -190,8 +190,8 @@ export default function OnboardingPage() {
                   className={cn(
                     'flex flex-col items-center gap-1 rounded-lg border px-3 py-3 text-center transition-colors',
                     applyAs === 'teacher'
-                      ? 'border-purple-500 bg-purple-50 text-purple-900'
-                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
+                      : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
                   )}
                   aria-pressed={applyAs === 'teacher'}
                 >
@@ -204,8 +204,8 @@ export default function OnboardingPage() {
                   className={cn(
                     'flex flex-col items-center gap-1 rounded-lg border px-3 py-3 text-center transition-colors',
                     applyAs === 'student'
-                      ? 'border-blue-500 bg-blue-50 text-blue-900'
-                      : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                      ? 'border-zinc-900 bg-zinc-900 text-white'
+                      : 'border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50'
                   )}
                   aria-pressed={applyAs === 'student'}
                 >
@@ -219,11 +219,11 @@ export default function OnboardingPage() {
               <>
                 <div className="space-y-1.5">
                   <Label>학년</Label>
-                  <div className="flex h-9 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-slate-700">
+                  <div className="flex h-9 items-center rounded-lg border border-zinc-200 bg-zinc-50 px-3 text-sm text-zinc-700">
                     {profile?.grade
                       ? `${profile.grade}학년`
                       : '자동 판별 실패 (관리자에게 문의)'}
-                    <span className="ml-auto text-xs text-slate-400">
+                    <span className="ml-auto text-xs text-zinc-400">
                       이메일 기반
                     </span>
                   </div>
@@ -260,8 +260,8 @@ export default function OnboardingPage() {
                           className={cn(
                             'flex items-start justify-between gap-2 rounded-lg border px-3 py-2.5 text-left transition-colors',
                             active
-                              ? 'border-blue-500 bg-blue-50 text-blue-900'
-                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                              ? 'border-zinc-900 bg-zinc-900 text-white'
+                              : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
                           )}
                           aria-pressed={active}
                         >
@@ -269,7 +269,7 @@ export default function OnboardingPage() {
                             <div className="text-sm font-semibold">
                               {opt.label}
                             </div>
-                            <div className="text-xs text-slate-500">
+                            <div className="text-xs opacity-70">
                               {opt.hint}
                             </div>
                           </div>
@@ -277,8 +277,8 @@ export default function OnboardingPage() {
                             className={cn(
                               'mt-1 h-4 w-4 shrink-0 rounded-full border-2',
                               active
-                                ? 'border-blue-500 bg-blue-500'
-                                : 'border-slate-300'
+                                ? 'border-white bg-white'
+                                : 'border-zinc-300'
                             )}
                           />
                         </button>
@@ -294,7 +294,7 @@ export default function OnboardingPage() {
               </>
             ) : (
               <>
-                <div className="rounded-lg bg-purple-50 px-3 py-2 text-xs text-purple-800">
+                <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-800">
                   선생님 계정은 관리자 승인 후 활성화돼요. 승인 전까지는 일반
                   사용자 권한으로 앱을 사용할 수 있어요.
                 </div>
@@ -332,8 +332,8 @@ export default function OnboardingPage() {
                           className={cn(
                             'rounded-lg border px-3 py-2 text-sm font-medium transition-colors',
                             active
-                              ? 'border-purple-500 bg-purple-50 text-purple-900'
-                              : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
+                              ? 'border-indigo-500 bg-indigo-50 text-indigo-900'
+                              : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
                           )}
                           aria-pressed={active}
                         >
@@ -363,7 +363,7 @@ export default function OnboardingPage() {
               disabled={!canSubmit}
               className={cn(
                 'w-full h-10',
-                applyAs === 'teacher' && 'bg-purple-600 hover:bg-purple-700'
+                applyAs === 'teacher' && 'bg-indigo-600 hover:bg-indigo-700'
               )}
               size="lg"
             >

@@ -26,29 +26,29 @@ const FILE_TYPE_STYLES: Record<MaterialFileType, FileTypeStyle> = {
   pdf: {
     Icon: FileTextIcon,
     label: 'PDF',
-    bg: 'bg-red-100',
+    bg: 'bg-red-50 border border-red-100',
     fg: 'text-red-600',
     ext: 'pdf',
   },
   hwp: {
     Icon: FileIcon,
     label: 'HWP',
-    bg: 'bg-blue-100',
-    fg: 'text-blue-600',
+    bg: 'bg-indigo-50 border border-indigo-100',
+    fg: 'text-indigo-600',
     ext: 'hwp',
   },
   image: {
     Icon: ImageIcon,
     label: 'IMG',
-    bg: 'bg-green-100',
-    fg: 'text-green-600',
+    bg: 'bg-emerald-50 border border-emerald-100',
+    fg: 'text-emerald-600',
     ext: 'jpg',
   },
   other: {
     Icon: FileIcon,
     label: 'FILE',
-    bg: 'bg-slate-100',
-    fg: 'text-slate-600',
+    bg: 'bg-zinc-100 border border-zinc-200',
+    fg: 'text-zinc-600',
     ext: '',
   },
 }
@@ -161,34 +161,32 @@ export default function MaterialCard({
       size="sm"
       onClick={handleClick}
       title={displayFilename ?? undefined}
-      className="cursor-pointer transition-all hover:ring-2 hover:ring-blue-400 active:scale-[0.98]"
+      className="cursor-pointer border border-zinc-200 bg-white shadow-none transition-colors hover:border-zinc-300"
     >
       <div className="flex items-start gap-3 px-3">
         <div
-          className={`flex ${compact ? 'h-10 w-10' : 'h-12 w-12'} shrink-0 items-center justify-center rounded-lg ${style.bg}`}
+          className={`flex ${compact ? 'h-10 w-10' : 'h-11 w-11'} shrink-0 items-center justify-center rounded-md ${style.bg}`}
         >
-          <Icon className={`${compact ? 'h-5 w-5' : 'h-6 w-6'} ${style.fg}`} />
+          <Icon className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} ${style.fg}`} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
-            <h3 className="line-clamp-2 text-sm font-semibold text-slate-900">
+            <h3 className="line-clamp-2 text-sm font-semibold tracking-tight text-zinc-900">
               {material.title}
             </h3>
             <div className="flex shrink-0 items-start gap-1">
               {isNew(material.created_at) && material.status === 'approved' && (
-                <Badge variant="destructive" className="h-5 px-1.5 text-[10px]">
+                <Badge className="h-5 rounded-md border border-red-200 bg-red-50 px-1.5 text-[10px] font-semibold text-red-600 hover:bg-red-50">
                   NEW
                 </Badge>
               )}
               {isOwnPending && (
-                <Badge variant="secondary" className="h-5 px-1.5 text-[10px]">
+                <Badge className="h-5 rounded-md border border-amber-200 bg-amber-50 px-1.5 text-[10px] font-medium text-amber-700 hover:bg-amber-50">
                   승인 대기
                 </Badge>
               )}
               {isPending && !isOwnPending && (
-                <Badge
-                  className="h-5 bg-amber-100 px-1.5 text-[10px] text-amber-700 hover:bg-amber-100"
-                >
+                <Badge className="h-5 rounded-md border border-amber-200 bg-amber-50 px-1.5 text-[10px] font-medium text-amber-700 hover:bg-amber-50">
                   대기
                 </Badge>
               )}
@@ -196,7 +194,7 @@ export default function MaterialCard({
                 <Button
                   variant="ghost"
                   size="icon-xs"
-                  className="text-slate-400 hover:text-red-600"
+                  className="text-zinc-400 hover:bg-zinc-100 hover:text-red-600"
                   onClick={handleDeleteClick}
                   aria-label="자료 삭제"
                 >
@@ -205,40 +203,39 @@ export default function MaterialCard({
               )}
             </div>
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
-            <span className="font-medium text-slate-700">{material.subject}</span>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zinc-500">
+            <span className="font-medium text-zinc-700">{material.subject}</span>
             {material.teacher?.name && (
               <>
-                <span>·</span>
+                <span className="text-zinc-300">·</span>
                 <span>{material.teacher.name} 선생님</span>
               </>
             )}
             {material.category && material.category !== material.subject && (
               <>
-                <span>·</span>
-                <span className="text-slate-500">{material.category}</span>
+                <span className="text-zinc-300">·</span>
+                <span>{material.category}</span>
               </>
             )}
           </div>
           {(material.class_number || material.grade) && (
-            <div className="mt-1 flex flex-wrap gap-1">
-              <Badge
-                variant="outline"
-                className="h-4 px-1.5 text-[10px] border-slate-200"
-              >
+            <div className="mt-1.5 flex flex-wrap gap-1">
+              <span className="inline-flex h-4 items-center rounded-md border border-zinc-200 bg-white px-1.5 text-[10px] font-medium text-zinc-600">
                 {material.grade}학년
                 {material.class_number ? ` ${material.class_number}반` : ''}
-              </Badge>
+              </span>
             </div>
           )}
           {showOriginal && (
-            <p className="mt-0.5 line-clamp-1 text-[10px] text-slate-400">
+            <p className="mt-0.5 line-clamp-1 text-[10px] text-zinc-400">
               {displayFilename}
             </p>
           )}
-          <div className="mt-1.5 flex items-center justify-between text-[11px] text-slate-400">
-            <span>{formatDate(material.created_at)}</span>
-            <span className="flex items-center gap-1 text-slate-500">
+          <div className="mt-2 flex items-center justify-between border-t border-zinc-100 pt-1.5 text-[11px] text-zinc-400">
+            <span className="font-mono tabular-nums">
+              {formatDate(material.created_at)}
+            </span>
+            <span className="flex items-center gap-1 text-zinc-500">
               {isInline ? (
                 <>
                   <ExternalLinkIcon className="h-3 w-3" />
