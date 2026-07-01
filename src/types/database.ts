@@ -1,4 +1,6 @@
-export type UserRole = 'student' | 'teacher' | 'admin'
+export type UserRole = 'student' | 'teacher' | 'admin' | 'class_leader'
+export type ClassLeaderType = 'leader' | 'vice_leader'
+export type ClassLeaderStatus = 'none' | 'pending' | 'approved' | 'rejected'
 
 export type User = {
   id: string
@@ -6,6 +8,10 @@ export type User = {
   name: string
   role: UserRole
   grade: number | null
+  class_number: number | null
+  class_leader_type: ClassLeaderType | null
+  class_leader_status: ClassLeaderStatus
+  onboarded: boolean
   avatar_url: string | null
   created_at: string
 }
@@ -39,6 +45,8 @@ export type TeacherSchedule = {
 }
 
 export type EventType = 'assignment' | 'exam' | 'personal'
+export type EventScope = 'personal' | 'class' | 'grade'
+export type EventApprovalStatus = 'approved' | 'pending' | 'rejected'
 
 export type Event = {
   id: string
@@ -49,6 +57,15 @@ export type Event = {
   event_type: EventType
   memo: string | null
   grade: number | null
+  class_number: number | null
+  period: string | null
+  start_time: string | null
+  end_time: string | null
+  is_completed: boolean
+  completed_at: string | null
+  approval_status: EventApprovalStatus
+  approved_by: string | null
+  scope: EventScope
   created_at: string
 }
 
@@ -75,6 +92,11 @@ export type MaterialWithTeacher = Material & {
   teacher: Pick<Teacher, 'id' | 'name'> | null
 }
 
+export type MaterialWithUploader = Material & {
+  teacher: Pick<Teacher, 'id' | 'name'> | null
+  uploader: Pick<User, 'id' | 'name' | 'email'> | null
+}
+
 export type MessageTone = 'formal' | 'casual'
 export type MessagePurpose = 'question' | 'counsel' | 'report' | 'research'
 
@@ -88,4 +110,20 @@ export type Message = {
   body: string
   is_read: boolean
   created_at: string
+}
+
+export type DailyMemo = {
+  id: string
+  user_id: string
+  memo_date: string
+  content: string
+  created_at: string
+  updated_at: string
+}
+
+export type EventCompletion = {
+  id: string
+  event_id: string
+  user_id: string
+  completed_at: string
 }

@@ -1,7 +1,8 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { LogOutIcon } from 'lucide-react'
+import { LogOutIcon, SettingsIcon, ShieldIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase-client'
 import { useUser } from '@/hooks/useUser'
 import { cn } from '@/lib/utils'
@@ -15,15 +16,10 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import type { User } from '@/types/database'
 
-function RoleBadge({
-  role,
-  grade,
-}: {
-  role: string | undefined
-  grade: number | null | undefined
-}) {
-  if (role === 'teacher') {
+function GradeClassBadge({ profile }: { profile: User }) {
+  if (profile.role === 'teacher') {
     return (
       <Badge
         variant="secondary"
@@ -33,7 +29,7 @@ function RoleBadge({
       </Badge>
     )
   }
-  if (role === 'admin') {
+  if (profile.role === 'admin') {
     return (
       <Badge
         variant="secondary"
@@ -43,22 +39,37 @@ function RoleBadge({
       </Badge>
     )
   }
-  if (role === 'student' && grade) {
-    return (
-      <Badge
-        variant="secondary"
-        className="bg-blue-100 text-blue-700 hover:bg-blue-100"
-      >
-        {grade}학년
-      </Badge>
-    )
-  }
-  return null
+  if (!profile.grade) return null
+  const label = profile.class_number
+    ? `${profile.grade}학년 ${profile.class_number}반`
+    : `${profile.grade}학년`
+  return (
+    <Badge
+      variant="secondary"
+      className="bg-blue-100 text-blue-700 hover:bg-blue-100"
+    >
+      {label}
+    </Badge>
+  )
+}
+
+function LeaderBadge({ profile }: { profile: User }) {
+  if (profile.role !== 'class_leader') return null
+  if (profile.class_leader_status !== 'approved') return null
+  const label = profile.class_leader_type === 'vice_leader' ? '부반장' : '반장'
+  return (
+    <Badge
+      variant="secondary"
+      className="bg-amber-100 text-amber-700 hover:bg-amber-100"
+    >
+      {label}
+    </Badge>
+  )
 }
 
 export default function Header() {
   const router = useRouter()
-  const { user, profile } = useUser()
+  const { user, profile, isAdmin } = useUser()
 
   const handleLogout = async () => {
     const supabase = createClient()
@@ -83,27 +94,28 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white">
       <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
-        <div className="flex items-center gap-2">
+        <Link href="/calendar" className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600">
             <span className="text-sm font-bold text-white">B</span>
           </div>
           <span className="font-bold text-slate-900">BIZZ</span>
-        </div>
+        </Link>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           {profile ? (
             <>
-              <span className="max-w-[110px] truncate text-sm font-medium text-slate-700">
+              <span className="hidden max-w-[110px] truncate text-sm font-medium text-slate-700 sm:inline">
                 {displayName}
               </span>
-              <RoleBadge role={profile.role} grade={profile.grade} />
+              <GradeClassBadge profile={profile} />
+              <LeaderBadge profile={profile} />
             </>
           ) : null}
 
           <DropdownMenu>
             <DropdownMenuTrigger
               className={cn(
-                'rounded-full outline-none',
+                'ml-1 rounded-full outline-none',
                 'focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1'
               )}
               aria-label="계정 메뉴"
@@ -128,6 +140,21 @@ export default function Header() {
                   </span>
                 )}
               </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/settings" className="flex items-center gap-1.5">
+                  <SettingsIcon />
+                  <span>설정</span>
+                </Link>
+              </DropdownMenuItem>
+              {isAdmin && (
+                <DropdownMenuItem asChild>
+                  <Link href="/admin" className="flex items-center gap-1.5">
+                    <ShieldIcon />
+                    <span>관리자 페이지</span>
+                  </Link>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onSelect={handleLogout}>
                 <LogOutIcon />

@@ -9,12 +9,16 @@ type UseUserResult = {
   user: SupabaseUser | null
   profile: User | null
   loading: boolean
+  isAdmin: boolean
+  isClassLeader: boolean
+  refresh: () => Promise<void>
 }
 
 export function useUser(): UseUserResult {
   const [user, setUser] = useState<SupabaseUser | null>(null)
   const [profile, setProfile] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [refreshTick, setRefreshTick] = useState(0)
 
   useEffect(() => {
     const supabase = createClient()
@@ -64,7 +68,16 @@ export function useUser(): UseUserResult {
       active = false
       sub.subscription.unsubscribe()
     }
-  }, [])
+  }, [refreshTick])
 
-  return { user, profile, loading }
+  const refresh = async () => {
+    setRefreshTick((t) => t + 1)
+  }
+
+  const isAdmin = profile?.role === 'admin'
+  const isClassLeader =
+    profile?.role === 'class_leader' &&
+    profile?.class_leader_status === 'approved'
+
+  return { user, profile, loading, isAdmin, isClassLeader, refresh }
 }

@@ -58,12 +58,19 @@ function sanitizeStorageFilename(name: string): string {
 }
 
 export default function MaterialsPage() {
-  const { user, profile, loading: userLoading } = useUser()
+  const {
+    user,
+    profile,
+    loading: userLoading,
+    isAdmin,
+    isClassLeader,
+  } = useUser()
 
   const [materials, setMaterials] = useState<MaterialWithTeacher[]>([])
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [loading, setLoading] = useState(true)
   const [gradeFilter, setGradeFilter] = useState<'all' | '1' | '2' | '3'>('all')
+  const [gradeFilterInitialized, setGradeFilterInitialized] = useState(false)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
 
@@ -80,6 +87,14 @@ export default function MaterialsPage() {
       setFormGrade(String(profile.grade))
     }
   }, [profile?.grade])
+
+  useEffect(() => {
+    if (gradeFilterInitialized) return
+    if (profile?.grade && [1, 2, 3].includes(profile.grade)) {
+      setGradeFilter(String(profile.grade) as '1' | '2' | '3')
+    }
+    if (profile) setGradeFilterInitialized(true)
+  }, [profile, gradeFilterInitialized])
 
   useEffect(() => {
     const supabase = createClient()
@@ -111,7 +126,9 @@ export default function MaterialsPage() {
       .select('*, teacher:teachers(id, name)')
       .order('created_at', { ascending: false })
 
-    if (user?.id) {
+    if (isAdmin || isClassLeader) {
+      query = query.in('status', ['approved', 'pending'])
+    } else if (user?.id) {
       query = query.or(
         `status.eq.approved,and(uploaded_by.eq.${user.id},status.eq.pending)`
       )
@@ -135,7 +152,7 @@ export default function MaterialsPage() {
       setMaterials((data ?? []) as MaterialWithTeacher[])
     }
     setLoading(false)
-  }, [debouncedSearch, gradeFilter, user?.id, userLoading])
+  }, [debouncedSearch, gradeFilter, user?.id, userLoading, isAdmin, isClassLeader])
 
   useEffect(() => {
     fetchMaterials()
