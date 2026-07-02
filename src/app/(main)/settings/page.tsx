@@ -152,7 +152,7 @@ export default function SettingsPage() {
   }
 
   const canApplyTeacher =
-    profile.role !== 'teacher' && profile.role !== 'admin'
+    profile.role === 'student' && profile.teacher_status === 'none'
 
   return (
     <div className="space-y-6 p-4">
@@ -740,6 +740,14 @@ function RoleCard({
             </>
           ) : (
             <>
+              {profile.teacher_status === 'pending' && (
+                <StatusChip
+                  variant="amber"
+                  icon={<ClockIcon className="h-3 w-3" />}
+                >
+                  선생님 승인 대기
+                </StatusChip>
+              )}
               {isApprovedLeader ? (
                 <StatusChip
                   variant="emerald"
@@ -754,9 +762,9 @@ function RoleCard({
                 >
                   {leaderLabel} 승인 대기 중
                 </StatusChip>
-              ) : (
+              ) : profile.teacher_status !== 'pending' ? (
                 <StatusChip variant="neutral">학생 계정</StatusChip>
-              )}
+              ) : null}
               {status === 'rejected' && (
                 <StatusChip
                   variant="red"
@@ -772,6 +780,13 @@ function RoleCard({
         {isTeacher && profile.teacher_status === 'pending' && (
           <p className="text-xs text-zinc-500">
             선생님 계정 승인은 관리자 페이지에서 처리돼요.
+          </p>
+        )}
+
+        {!isAdmin && !isTeacher && profile.teacher_status === 'pending' && (
+          <p className="text-xs text-zinc-500">
+            선생님 계정 승인은 관리자 페이지에서 처리돼요. 승인 전까지는 학생
+            화면으로 이용할 수 있어요.
           </p>
         )}
 

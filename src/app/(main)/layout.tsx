@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase-server'
 import { redirect } from 'next/navigation'
 import BottomTabBar from '@/components/BottomTabBar'
 import Header from '@/components/Header'
+import WelcomeSheetGate from '@/components/WelcomeSheet'
 
 export default async function MainLayout({
   children,
@@ -27,6 +28,7 @@ export default async function MainLayout({
         userRole={profile?.role || 'student'}
         teacherStatus={profile?.teacher_status ?? null}
       />
+      <WelcomeSheetGate />
     </div>
   )
 }
