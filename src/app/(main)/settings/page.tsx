@@ -2022,36 +2022,38 @@ function DangerZoneCard({
   const deleteAccount = async () => {
     if (
       !confirm(
-        '정말 계정을 삭제하시겠어요?\n\n모든 데이터가 삭제되며 복구할 수 없습니다.\n동일한 이메일로 다시 로그인하면 새 계정으로 시작돼요.'
+        '정말 계정을 삭제하시겠어요? 모든 데이터가 영구적으로 삭제되며 복구할 수 없습니다.'
       )
-    )
+    ) {
       return
-    if (
-      !confirm(
-        `확인을 위해 한 번 더 물어볼게요.\n\n${profile.name} 님의 계정을 정말 삭제할까요?`
-      )
-    )
-      return
+    }
 
     setDeleting(true)
+    const toastId = toast.loading('계정을 삭제하는 중...')
+
     try {
+      const res = await fetch('/api/delete-account', { method: 'POST' })
+      const result = (await res.json()) as { error?: string; success?: boolean }
+
+      if (!res.ok) {
+        throw new Error(result.error || '삭제 실패')
+      }
+
+      Object.keys(localStorage).forEach((key) => {
+        if (key.includes(user.id)) {
+          localStorage.removeItem(key)
+        }
+      })
+
       const supabase = createClient()
-
-      // public.users 삭제 (관련 데이터는 FK CASCADE 로 정리됨)
-      const { error: delErr } = await supabase
-        .from('users')
-        .delete()
-        .eq('id', user.id)
-      if (delErr) throw delErr
-
-      // 세션 종료. auth.users 자체는 서버 측에서만 삭제 가능하므로 유지.
-      // 동일 이메일로 재로그인하면 public.users 부재 → auth/callback 에서 새 프로필 생성.
       await supabase.auth.signOut()
-      router.replace('/login')
+
+      toast.success('계정이 삭제되었어요', { id: toastId })
+      router.push('/login')
       router.refresh()
     } catch (err) {
       console.error('delete account failed:', err)
-      toast.error(`삭제 실패: ${getErrorMessage(err)}`)
+      toast.error('계정 삭제에 실패했어요. 다시 시도해주세요', { id: toastId })
       setDeleting(false)
     }
   }
@@ -2073,7 +2075,7 @@ function DangerZoneCard({
           <p className="font-medium text-zinc-900">계정 삭제 안내</p>
           <ul className="mt-1.5 list-disc space-y-0.5 pl-4">
             <li>공개된 자료·공지·시간표는 함께 삭제돼요.</li>
-            <li>같은 이메일로 재로그인하면 새 계정으로 시작할 수 있어요.</li>
+            <li>구글 계정 연결도 해제되며, 같은 이메일로 다시 가입할 수 있어요.</li>
             <li>선생님 프로필도 함께 삭제돼요.</li>
           </ul>
         </div>
