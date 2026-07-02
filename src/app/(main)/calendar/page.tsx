@@ -35,6 +35,7 @@ import type {
   SchoolEventCategory,
 } from '@/types/database'
 import { cn, getErrorMessage } from '@/lib/utils'
+import { toast } from 'sonner'
 import { SCHOOL_PERIODS, findPeriodByValue } from '@/lib/school-schedule'
 import EmptyState from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
@@ -56,13 +57,13 @@ import {
   TabsTrigger,
 } from '@/components/ui/tabs'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 
 type ViewMode = 'calendar' | 'list'
 
@@ -858,6 +859,7 @@ export default function CalendarPage() {
       }
 
       setDialogOpen(false)
+      toast.success(formMode === 'add' ? '일정이 추가되었어요' : '일정이 수정되었어요')
       const [y, m, d] = formDate.split('-').map(Number)
       const insertedDate = new Date(y, m - 1, d)
       if (
@@ -870,7 +872,7 @@ export default function CalendarPage() {
       await fetchAll()
     } catch (err) {
       console.error('Save event failed:', err)
-      alert(`저장에 실패했습니다: ${getErrorMessage(err)}`)
+      toast.error(`저장에 실패했어요: ${getErrorMessage(err)}`)
     } finally {
       setSubmitting(false)
     }
@@ -882,7 +884,7 @@ export default function CalendarPage() {
     const { error } = await supabase.from('events').delete().eq('id', eventId)
     if (error) {
       console.error('Delete event failed:', error)
-      alert(`삭제 실패: ${getErrorMessage(error)}`)
+      toast.error(`삭제 실패: ${getErrorMessage(error)}`)
       return
     }
     await fetchAll()
@@ -893,44 +895,77 @@ export default function CalendarPage() {
     const currentlyDone = isEventCompleted(event)
     const supabase = createClient()
 
+    // Optimistic UI
     if (event.scope === 'personal' && event.user_id === user.id) {
-      const { error } = await supabase
-        .from('events')
-        .update({
-          is_completed: !currentlyDone,
-          completed_at: currentlyDone ? null : new Date().toISOString(),
-        })
-        .eq('id', event.id)
-      if (error) {
-        console.error('Toggle completion failed:', error)
-        alert(`완료 처리 실패: ${getErrorMessage(error)}`)
-        return
-      }
+      setEvents((prev) =>
+        prev.map((e) =>
+          e.id === event.id
+            ? {
+                ...e,
+                is_completed: !currentlyDone,
+                completed_at: currentlyDone ? null : new Date().toISOString(),
+              }
+            : e
+        )
+      )
     } else {
-      if (currentlyDone) {
+      setCompletions((prev) => {
+        const next = new Set(prev)
+        if (currentlyDone) next.delete(event.id)
+        else next.add(event.id)
+        return next
+      })
+    }
+
+    try {
+      if (event.scope === 'personal' && event.user_id === user.id) {
+        const { error } = await supabase
+          .from('events')
+          .update({
+            is_completed: !currentlyDone,
+            completed_at: currentlyDone ? null : new Date().toISOString(),
+          })
+          .eq('id', event.id)
+        if (error) throw error
+      } else if (currentlyDone) {
         const { error } = await supabase
           .from('event_completions')
           .delete()
           .eq('event_id', event.id)
           .eq('user_id', user.id)
-        if (error) {
-          console.error('Uncomplete failed:', error)
-          alert(`완료 취소 실패: ${getErrorMessage(error)}`)
-          return
-        }
+        if (error) throw error
       } else {
         const { error } = await supabase.from('event_completions').insert({
           event_id: event.id,
           user_id: user.id,
         })
-        if (error) {
-          console.error('Complete failed:', error)
-          alert(`완료 처리 실패: ${getErrorMessage(error)}`)
-          return
-        }
+        if (error) throw error
       }
+    } catch (err) {
+      console.error('Toggle completion failed:', err)
+      // Rollback
+      if (event.scope === 'personal' && event.user_id === user.id) {
+        setEvents((prev) =>
+          prev.map((e) =>
+            e.id === event.id
+              ? {
+                  ...e,
+                  is_completed: currentlyDone,
+                  completed_at: currentlyDone ? new Date().toISOString() : null,
+                }
+              : e
+          )
+        )
+      } else {
+        setCompletions((prev) => {
+          const next = new Set(prev)
+          if (currentlyDone) next.add(event.id)
+          else next.delete(event.id)
+          return next
+        })
+      }
+      toast.error(`완료 처리에 실패했어요: ${getErrorMessage(err)}`)
     }
-    await fetchAll()
   }
 
   const startEditMemo = () => {
@@ -981,7 +1016,7 @@ export default function CalendarPage() {
       await fetchAll()
     } catch (err) {
       console.error('Save memo failed:', err)
-      alert(`메모 저장 실패: ${getErrorMessage(err)}`)
+      toast.error(`메모 저장 실패: ${getErrorMessage(err)}`)
     } finally {
       setSavingMemo(false)
     }
@@ -1049,7 +1084,7 @@ export default function CalendarPage() {
         </button>
       )}
 
-      <div className="inline-flex w-full items-center rounded-lg border border-zinc-200 bg-white p-0.5">
+      <div className="inline-flex w-full rounded-lg bg-zinc-100 p-0.5">
         {(['calendar', 'list'] as const).map((v) => {
           const active = view === v
           return (
@@ -1058,10 +1093,10 @@ export default function CalendarPage() {
               type="button"
               onClick={() => setView(v)}
               className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-[13px] font-medium transition-colors',
+                'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all duration-200',
                 active
-                  ? 'bg-zinc-900 text-white'
-                  : 'text-zinc-500 hover:text-zinc-800'
+                  ? 'bg-white text-zinc-900 shadow-sm'
+                  : 'text-zinc-500 hover:text-zinc-700'
               )}
               aria-pressed={active}
             >
@@ -1091,7 +1126,7 @@ export default function CalendarPage() {
           onClick={goToday}
           className="group flex flex-col items-center leading-tight"
         >
-          <h1 className="text-[17px] font-semibold tracking-tight text-zinc-900">
+          <h1 className="text-xl font-bold tracking-tight text-zinc-900">
             {monthTitle}
           </h1>
           <span className="text-[10px] font-medium text-zinc-400 group-hover:text-zinc-600">
@@ -1176,7 +1211,7 @@ export default function CalendarPage() {
                     type="button"
                     onClick={() => setSelectedDate(startOfDay(d))}
                     className={cn(
-                      'relative flex aspect-square flex-col items-center justify-start p-1 text-[13px] transition-colors',
+                      'relative flex aspect-square flex-col items-center justify-start p-1 text-[13px] transition-all duration-100 active:scale-[0.98]',
                       col !== 6 && 'border-r border-zinc-100',
                       row !== rows - 1 && 'border-b border-zinc-100',
                       'hover:bg-zinc-50',
@@ -1376,16 +1411,16 @@ export default function CalendarPage() {
         <span className="ml-1 text-sm font-semibold">일정 추가</span>
       </Button>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>
+      <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
+        <SheetContent side="bottom" className="rounded-t-2xl">
+          <SheetHeader>
+            <SheetTitle>
               {formMode === 'add' ? '일정 추가' : '일정 수정'}
-            </DialogTitle>
-            <DialogDescription>
+            </SheetTitle>
+            <SheetDescription>
               범위를 선택하면 나만 볼지, 반/학년에 공유할지 정할 수 있어요.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
           <form onSubmit={handleSubmit} className="space-y-3">
             <div className="space-y-1.5">
@@ -1628,7 +1663,7 @@ export default function CalendarPage() {
               )}
             </div>
 
-            <DialogFooter>
+            <SheetFooter>
               <Button
                 type="button"
                 variant="outline"
@@ -1649,10 +1684,10 @@ export default function CalendarPage() {
                   '수정'
                 )}
               </Button>
-            </DialogFooter>
+            </SheetFooter>
           </form>
-        </DialogContent>
-      </Dialog>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
@@ -1921,7 +1956,7 @@ function SelectedEventItem({
   return (
     <li
       className={cn(
-        'flex items-start gap-3 rounded-lg border border-zinc-200 bg-white p-3',
+        'flex items-start gap-3 rounded-lg border border-zinc-200 bg-white p-3 transition-transform duration-100 active:scale-[0.98]',
         completed && 'opacity-60'
       )}
     >
@@ -2082,7 +2117,7 @@ function EventListItem({
   return (
     <li
       className={cn(
-        'flex items-stretch gap-3 rounded-lg border p-3',
+        'flex items-stretch gap-3 rounded-lg border p-3 transition-transform duration-100 active:scale-[0.98]',
         meta.cardBg,
         meta.cardBorder,
         completed && 'opacity-60'

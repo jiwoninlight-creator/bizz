@@ -11,6 +11,7 @@ import {
 import { createClient } from '@/lib/supabase-client'
 import { useUser } from '@/hooks/useUser'
 import { getErrorMessage, cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { getSubjectColor, SUBJECT_ORDER } from '@/lib/subject-colors'
 import type {
   MaterialFileType,
@@ -31,13 +32,13 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 
 const SUBJECT_OPTIONS = [
   '국어',
@@ -145,6 +146,7 @@ export default function MaterialsPage() {
   const [editingMaterial, setEditingMaterial] = useState<MaterialWithTeacher | null>(
     null
   )
+  const [exitingIds, setExitingIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (gradeFilterInitialized) return
@@ -317,7 +319,7 @@ export default function MaterialsPage() {
         try {
           new URL(url)
         } catch {
-          alert('올바른 링크 주소를 입력해주세요 (http/https).')
+          toast.error('올바른 링크 주소를 입력해주세요 (http/https).')
           setSubmitting(false)
           return
         }
@@ -333,7 +335,7 @@ export default function MaterialsPage() {
       } else {
         if (!formFile) return
         if (formFile.size > MAX_FILE_SIZE) {
-          alert('50MB 이하 파일만 업로드할 수 있습니다')
+          toast.error('50MB 이하 파일만 업로드할 수 있어요')
           setSubmitting(false)
           return
         }
@@ -364,15 +366,15 @@ export default function MaterialsPage() {
       }
 
       setDialogOpen(false)
-      alert(
+      toast.success(
         willAutoApprove
-          ? '자료가 등록되었습니다.'
-          : '관리자 승인 후 공개됩니다.'
+          ? '자료가 등록되었어요'
+          : '관리자 승인을 기다려주세요'
       )
       await fetchMaterials()
     } catch (err) {
       console.error('Upload failed:', err)
-      alert(`업로드에 실패했습니다: ${getErrorMessage(err)}`)
+      toast.error(`업로드에 실패했어요: ${getErrorMessage(err)}`)
     } finally {
       setSubmitting(false)
     }
@@ -417,11 +419,21 @@ export default function MaterialsPage() {
       )
     )
       return
+
+    const prevMaterials = materials
+    setExitingIds((prev) => new Set(prev).add(m.id))
+    await new Promise((r) => setTimeout(r, 200))
+    setMaterials((prev) => prev.filter((x) => x.id !== m.id))
+    setExitingIds((prev) => {
+      const next = new Set(prev)
+      next.delete(m.id)
+      return next
+    })
+
     try {
       const supabase = createClient()
 
       if (!isLink) {
-        // Storage에서 파일 삭제 (실패해도 DB row 삭제는 진행)
         const storagePath = extractStoragePath(m.file_url)
         if (storagePath) {
           const { error: storageErr } = await supabase.storage
@@ -438,10 +450,11 @@ export default function MaterialsPage() {
         .delete()
         .eq('id', m.id)
       if (error) throw error
-      await fetchMaterials()
+      toast.success('자료가 삭제되었어요')
     } catch (err) {
       console.error('Delete material failed:', err)
-      alert(`삭제 실패: ${getErrorMessage(err)}`)
+      setMaterials(prevMaterials)
+      toast.error(`삭제 실패: ${getErrorMessage(err)}`)
     }
   }
 
@@ -639,15 +652,16 @@ export default function MaterialsPage() {
       return (
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {gradeFilteredCurriculum.map((m) => (
-            <MaterialCard
-              key={m.id}
-              material={m}
-              currentUserId={user?.id}
-              canDelete={canDeleteMaterial(m)}
-              onDelete={handleDelete}
-              canEdit={canEditMaterial(m)}
-              onEdit={handleEdit}
-            />
+            <MaterialCardWrap key={m.id} id={m.id} exiting={exitingIds}>
+              <MaterialCard
+                material={m}
+                currentUserId={user?.id}
+                canDelete={canDeleteMaterial(m)}
+                onDelete={handleDelete}
+                canEdit={canEditMaterial(m)}
+                onEdit={handleEdit}
+              />
+            </MaterialCardWrap>
           ))}
         </div>
       )
@@ -699,14 +713,14 @@ export default function MaterialsPage() {
   return (
     <div className="p-4">
       <div className="mb-3 flex items-center justify-between">
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
+        <h1 className="text-xl font-bold tracking-tight text-zinc-900">
           수업 자료
         </h1>
       </div>
 
       {/* Mobile: horizontal subject chips (sticky) */}
       <div className="-mx-4 sticky top-14 z-10 mb-3 border-b border-zinc-100 bg-white/95 px-4 pb-2 backdrop-blur md:hidden">
-        <div className="flex gap-1.5 overflow-x-auto py-1">
+        <div className="inline-flex max-w-full gap-0.5 overflow-x-auto rounded-lg bg-zinc-100 p-0.5 py-1">
           <SidebarChipButton
             active={sidebarKey === 'all'}
             onClick={selectAll}
@@ -863,6 +877,27 @@ export default function MaterialsPage() {
 
 /* ------------------------------ Subcomponents ------------------------------ */
 
+function MaterialCardWrap({
+  id,
+  exiting,
+  children,
+}: {
+  id: string
+  exiting: Set<string>
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        'transition-all duration-200',
+        exiting.has(id) && 'scale-95 opacity-0'
+      )}
+    >
+      {children}
+    </div>
+  )
+}
+
 function SidebarRow({
   active,
   onClick,
@@ -935,10 +970,10 @@ function SidebarChipButton({
       type="button"
       onClick={onClick}
       className={cn(
-        'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium transition-colors duration-150',
+        'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all duration-150',
         active
-          ? 'border-zinc-900 bg-zinc-900 text-white'
-          : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50'
+          ? 'bg-white text-zinc-900 shadow-sm'
+          : 'text-zinc-500 hover:text-zinc-700'
       )}
     >
       {icon}
@@ -1261,12 +1296,12 @@ function UploadDialog(props: UploadDialogProps) {
         : '업로드한 자료는 관리자 승인 후 해당 학년에 공개돼요.'
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>자료 등록하기</DialogTitle>
-          <DialogDescription>{description}</DialogDescription>
-        </DialogHeader>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="rounded-t-2xl">
+        <SheetHeader>
+          <SheetTitle>자료 등록하기</SheetTitle>
+          <SheetDescription>{description}</SheetDescription>
+        </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-1.5">
@@ -1466,7 +1501,7 @@ function UploadDialog(props: UploadDialogProps) {
             </div>
           )}
 
-          <DialogFooter>
+          <SheetFooter>
             <Button
               type="button"
               variant="outline"
@@ -1485,10 +1520,10 @@ function UploadDialog(props: UploadDialogProps) {
                 '등록'
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -1527,11 +1562,11 @@ function MaterialEditDialog({
 
   const save = async () => {
     if (!title.trim()) {
-      alert('제목을 입력해주세요.')
+      toast.error('제목을 입력해주세요.')
       return
     }
     if (!subject || !grade) {
-      alert('과목과 학년을 선택해주세요.')
+      toast.error('과목과 학년을 선택해주세요.')
       return
     }
     setSaving(true)
@@ -1549,25 +1584,26 @@ function MaterialEditDialog({
         })
         .eq('id', material.id)
       if (error) throw error
+      toast.success('저장되었어요')
       await onSaved()
     } catch (err) {
       console.error('edit material failed:', err)
-      alert(`저장 실패: ${getErrorMessage(err)}`)
+      toast.error(`저장 실패: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <Dialog open={!!material} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>자료 수정</DialogTitle>
-          <DialogDescription>
+    <Sheet open={!!material} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="rounded-t-2xl">
+        <SheetHeader>
+          <SheetTitle>자료 수정</SheetTitle>
+          <SheetDescription>
             제목·과목·선생님·학년·반·카테고리를 수정할 수 있어요. 파일은
             바꿀 수 없어요.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="edit-title">제목</Label>
@@ -1665,7 +1701,7 @@ function MaterialEditDialog({
             </Select>
           </div>
         </div>
-        <DialogFooter>
+        <SheetFooter>
           <Button
             variant="outline"
             onClick={() => onOpenChange(false)}
@@ -1683,8 +1719,8 @@ function MaterialEditDialog({
               '저장'
             )}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }

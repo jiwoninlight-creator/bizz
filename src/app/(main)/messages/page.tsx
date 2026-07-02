@@ -23,6 +23,8 @@ import { createClient } from '@/lib/supabase-client'
 import { useUser } from '@/hooks/useUser'
 import type { Message, MessagePurpose, MessageTone } from '@/types/database'
 import { cn, getErrorMessage } from '@/lib/utils'
+import { formatFullDateTime, formatRelativeTime } from '@/lib/format-time'
+import { toast } from 'sonner'
 import EmptyState from '@/components/EmptyState'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -95,28 +97,6 @@ type Conversation = {
   lastMessage: Message
   unreadCount: number
   purposeSummary: MessagePurpose // 최신 메시지 목적
-}
-
-function formatWhen(iso: string): string {
-  const d = new Date(iso)
-  const now = new Date()
-  const sameDay =
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  if (sameDay) {
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-  }
-  const daysDiff = Math.floor(
-    (now.getTime() - d.getTime()) / (24 * 3600 * 1000)
-  )
-  if (daysDiff < 7) return `${daysDiff}일 전`
-  return `${d.getMonth() + 1}/${d.getDate()}`
-}
-
-function formatFullWhen(iso: string): string {
-  const d = new Date(iso)
-  return `${d.getMonth() + 1}월 ${d.getDate()}일 ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 export default function MessagesPage() {
@@ -251,7 +231,7 @@ function MessagesInner() {
       setConversations(convList)
     } catch (err) {
       console.error('load conversations failed:', err)
-      alert(`대화 목록 로드 실패: ${getErrorMessage(err)}`)
+      toast.error(`대화 목록 로드 실패: ${getErrorMessage(err)}`)
     } finally {
       setLoading(false)
     }
@@ -433,8 +413,11 @@ function ConversationRow({
             <p className="line-clamp-1 min-w-0 flex-1 text-xs text-zinc-500">
               {lastMessage.title || lastMessage.body}
             </p>
-            <span className="shrink-0 text-[10px] text-zinc-400 tabular-nums">
-              {formatWhen(lastMessage.created_at)}
+            <span
+              className="shrink-0 text-[11px] text-zinc-400 tabular-nums"
+              title={formatFullDateTime(lastMessage.created_at)}
+            >
+              {formatRelativeTime(lastMessage.created_at)}
             </span>
           </div>
         </div>
@@ -507,7 +490,7 @@ function ConversationDetail({
       }
     } catch (err) {
       console.error('load messages failed:', err)
-      alert(`대화 로드 실패: ${getErrorMessage(err)}`)
+      toast.error(`대화 로드 실패: ${getErrorMessage(err)}`)
     } finally {
       setLoading(false)
     }
@@ -540,7 +523,7 @@ function ConversationDetail({
       await onMessagesChanged()
     } catch (err) {
       console.error('send failed:', err)
-      alert(`전송 실패: ${getErrorMessage(err)}`)
+      toast.error(`전송 실패: ${getErrorMessage(err)}`)
     } finally {
       setSending(false)
     }
@@ -722,8 +705,11 @@ function MessageBubble({ message, own }: { message: Message; own: boolean }) {
           >
             {TONE_LABEL[message.tone]}
           </span>
-          <span className="ml-auto tabular-nums">
-            {formatFullWhen(message.created_at)}
+          <span
+            className="ml-auto tabular-nums"
+            title={formatFullDateTime(message.created_at)}
+          >
+            {formatRelativeTime(message.created_at)}
           </span>
         </div>
         {message.title && message.title !== '답장' && (

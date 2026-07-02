@@ -15,7 +15,8 @@ import {
   XIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase-client'
-import { getErrorMessage } from '@/lib/utils'
+import { getErrorMessage, cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { useUser } from '@/hooks/useUser'
 import SharedEmptyState from '@/components/EmptyState'
 import type {
@@ -179,13 +180,38 @@ export default function AdminDashboardPage() {
   const [loadingEvents, setLoadingEvents] = useState(true)
   const [loadingProfileChanges, setLoadingProfileChanges] = useState(true)
   const [busy, setBusy] = useState<Record<string, boolean>>({})
+  const [exitingIds, setExitingIds] = useState<Set<string>>(new Set())
 
   const [editingMaterial, setEditingMaterial] = useState<PendingMaterial | null>(
     null
   )
 
-  const setItemBusy = (id: string, v: boolean) =>
-    setBusy((b) => ({ ...b, [id]: v }))
+  const optimisticRemove = async <T extends { id: string }>(
+    item: T,
+    getList: () => T[],
+    setList: (next: T[]) => void,
+    action: () => Promise<void>,
+    successMsg: string,
+    errorPrefix: string
+  ) => {
+    const snapshot = getList()
+    setExitingIds((prev) => new Set(prev).add(item.id))
+    await new Promise((r) => setTimeout(r, 200))
+    setList(getList().filter((x) => x.id !== item.id))
+    setExitingIds((prev) => {
+      const next = new Set(prev)
+      next.delete(item.id)
+      return next
+    })
+    try {
+      await action()
+      toast.success(successMsg)
+    } catch (err) {
+      console.error(errorPrefix, err)
+      setList(snapshot)
+      toast.error(`${errorPrefix}: ${getErrorMessage(err)}`)
+    }
+  }
 
   const fetchLeaders = useCallback(async () => {
     setLoadingLeaders(true)
@@ -302,40 +328,40 @@ export default function AdminDashboardPage() {
   }, [fetchAll])
 
   const approveLeader = async (a: LeaderApplicant) => {
-    setItemBusy(a.id, true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('users')
-        .update({ role: 'class_leader', class_leader_status: 'approved' })
-        .eq('id', a.id)
-      if (error) throw error
-      await fetchLeaders()
-    } catch (err) {
-      console.error('Approve leader failed:', err)
-      alert(`승인 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setItemBusy(a.id, false)
-    }
+    await optimisticRemove(
+      a,
+      () => leaders,
+      setLeaders,
+      async () => {
+        const supabase = createClient()
+        const { error } = await supabase
+          .from('users')
+          .update({ role: 'class_leader', class_leader_status: 'approved' })
+          .eq('id', a.id)
+        if (error) throw error
+      },
+      '승인되었어요',
+      '승인 실패'
+    )
   }
 
   const rejectLeader = async (a: LeaderApplicant) => {
     if (!confirm(`${a.name} 님의 신청을 반려할까요?`)) return
-    setItemBusy(a.id, true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('users')
-        .update({ class_leader_status: 'rejected', class_leader_type: null })
-        .eq('id', a.id)
-      if (error) throw error
-      await fetchLeaders()
-    } catch (err) {
-      console.error('Reject leader failed:', err)
-      alert(`반려 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setItemBusy(a.id, false)
-    }
+    await optimisticRemove(
+      a,
+      () => leaders,
+      setLeaders,
+      async () => {
+        const supabase = createClient()
+        const { error } = await supabase
+          .from('users')
+          .update({ class_leader_status: 'rejected', class_leader_type: null })
+          .eq('id', a.id)
+        if (error) throw error
+      },
+      '반려되었어요',
+      '반려 실패'
+    )
   }
 
   const approveTeacher = async (a: TeacherApplicant) => {
@@ -348,36 +374,36 @@ export default function AdminDashboardPage() {
       )
         return
     }
-    setItemBusy(a.id, true)
-    try {
-      const supabase = createClient()
-      if (isDowngrade) {
-        const { error } = await supabase
-          .from('users')
-          .update({ role: 'student', teacher_status: 'none' })
-          .eq('id', a.id)
-        if (error) throw error
-        if (a.teacher_profile?.id) {
-          const { error: tErr } = await supabase
-            .from('teachers')
-            .update({ user_id: null })
-            .eq('id', a.teacher_profile.id)
-          if (tErr) throw tErr
+    await optimisticRemove(
+      a,
+      () => teacherApplicants,
+      setTeacherApplicants,
+      async () => {
+        const supabase = createClient()
+        if (isDowngrade) {
+          const { error } = await supabase
+            .from('users')
+            .update({ role: 'student', teacher_status: 'none' })
+            .eq('id', a.id)
+          if (error) throw error
+          if (a.teacher_profile?.id) {
+            const { error: tErr } = await supabase
+              .from('teachers')
+              .update({ user_id: null })
+              .eq('id', a.teacher_profile.id)
+            if (tErr) throw tErr
+          }
+        } else {
+          const { error } = await supabase
+            .from('users')
+            .update({ role: 'teacher', teacher_status: 'approved' })
+            .eq('id', a.id)
+          if (error) throw error
         }
-      } else {
-        const { error } = await supabase
-          .from('users')
-          .update({ role: 'teacher', teacher_status: 'approved' })
-          .eq('id', a.id)
-        if (error) throw error
-      }
-      await fetchTeachers()
-    } catch (err) {
-      console.error('Approve teacher failed:', err)
-      alert(`승인 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setItemBusy(a.id, false)
-    }
+      },
+      '승인되었어요',
+      '승인 실패'
+    )
   }
 
   const rejectTeacher = async (a: TeacherApplicant) => {
@@ -386,170 +412,169 @@ export default function AdminDashboardPage() {
       ? `${a.name} 님의 학생 전환 요청을 반려할까요?`
       : `${a.name} 님의 선생님 신청을 반려할까요?`
     if (!confirm(msg)) return
-    setItemBusy(a.id, true)
-    try {
-      const supabase = createClient()
-      if (isDowngrade) {
-        // 반려 = 요청 취소. 선생님 상태로 복귀.
-        const { error } = await supabase
-          .from('users')
-          .update({ teacher_status: 'approved' })
-          .eq('id', a.id)
-        if (error) throw error
-      } else {
-        const { error: uErr } = await supabase
-          .from('users')
-          .update({ teacher_status: 'rejected', role: 'student' })
-          .eq('id', a.id)
-        if (uErr) throw uErr
-        if (a.teacher_profile?.id) {
-          const { error: tErr } = await supabase
-            .from('teachers')
-            .delete()
-            .eq('id', a.teacher_profile.id)
-          if (tErr) throw tErr
+    await optimisticRemove(
+      a,
+      () => teacherApplicants,
+      setTeacherApplicants,
+      async () => {
+        const supabase = createClient()
+        if (isDowngrade) {
+          const { error } = await supabase
+            .from('users')
+            .update({ teacher_status: 'approved' })
+            .eq('id', a.id)
+          if (error) throw error
+        } else {
+          const { error: uErr } = await supabase
+            .from('users')
+            .update({ teacher_status: 'rejected', role: 'student' })
+            .eq('id', a.id)
+          if (uErr) throw uErr
+          if (a.teacher_profile?.id) {
+            const { error: tErr } = await supabase
+              .from('teachers')
+              .delete()
+              .eq('id', a.teacher_profile.id)
+            if (tErr) throw tErr
+          }
         }
-      }
-      await fetchTeachers()
-    } catch (err) {
-      console.error('Reject teacher failed:', err)
-      alert(`반려 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setItemBusy(a.id, false)
-    }
+      },
+      '반려되었어요',
+      '반려 실패'
+    )
   }
 
   const approveProfileChange = async (a: ProfileChangeApplicant) => {
-    setItemBusy(a.id, true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('users')
-        .update({
-          grade: a.pending_grade ?? a.grade,
-          class_number: a.pending_class_number ?? a.class_number,
-          pending_grade: null,
-          pending_class_number: null,
-          profile_change_status: 'none',
-        })
-        .eq('id', a.id)
-      if (error) throw error
-      await fetchProfileChanges()
-    } catch (err) {
-      console.error('Approve profile change failed:', err)
-      alert(`승인 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setItemBusy(a.id, false)
-    }
+    await optimisticRemove(
+      a,
+      () => profileChanges,
+      setProfileChanges,
+      async () => {
+        const supabase = createClient()
+        const { error } = await supabase
+          .from('users')
+          .update({
+            grade: a.pending_grade ?? a.grade,
+            class_number: a.pending_class_number ?? a.class_number,
+            pending_grade: null,
+            pending_class_number: null,
+            profile_change_status: 'none',
+          })
+          .eq('id', a.id)
+        if (error) throw error
+      },
+      '승인되었어요',
+      '승인 실패'
+    )
   }
 
   const rejectProfileChange = async (a: ProfileChangeApplicant) => {
     if (!confirm(`${a.name} 님의 정보 변경 요청을 반려할까요?`)) return
-    setItemBusy(a.id, true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('users')
-        .update({
-          pending_grade: null,
-          pending_class_number: null,
-          profile_change_status: 'rejected',
-        })
-        .eq('id', a.id)
-      if (error) throw error
-      await fetchProfileChanges()
-    } catch (err) {
-      console.error('Reject profile change failed:', err)
-      alert(`반려 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setItemBusy(a.id, false)
-    }
+    await optimisticRemove(
+      a,
+      () => profileChanges,
+      setProfileChanges,
+      async () => {
+        const supabase = createClient()
+        const { error } = await supabase
+          .from('users')
+          .update({
+            pending_grade: null,
+            pending_class_number: null,
+            profile_change_status: 'rejected',
+          })
+          .eq('id', a.id)
+        if (error) throw error
+      },
+      '반려되었어요',
+      '반려 실패'
+    )
   }
 
   const approveMaterial = async (m: PendingMaterial) => {
     if (!user) return
-    setItemBusy(m.id, true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('materials')
-        .update({
-          status: 'approved',
-          approved_by: user.id,
-          approved_at: new Date().toISOString(),
-        })
-        .eq('id', m.id)
-      if (error) throw error
-      await fetchMaterials()
-    } catch (err) {
-      console.error('Approve material failed:', err)
-      alert(`승인 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setItemBusy(m.id, false)
-    }
+    await optimisticRemove(
+      m,
+      () => materials,
+      setMaterials,
+      async () => {
+        const supabase = createClient()
+        const { error } = await supabase
+          .from('materials')
+          .update({
+            status: 'approved',
+            approved_by: user.id,
+            approved_at: new Date().toISOString(),
+          })
+          .eq('id', m.id)
+        if (error) throw error
+      },
+      '승인되었어요',
+      '승인 실패'
+    )
   }
 
   const rejectMaterial = async (m: PendingMaterial) => {
     if (!confirm(`"${m.title}" 자료를 반려할까요?`)) return
-    setItemBusy(m.id, true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('materials')
-        .update({ status: 'rejected' })
-        .eq('id', m.id)
-      if (error) throw error
-      await fetchMaterials()
-    } catch (err) {
-      console.error('Reject material failed:', err)
-      alert(`반려 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setItemBusy(m.id, false)
-    }
+    await optimisticRemove(
+      m,
+      () => materials,
+      setMaterials,
+      async () => {
+        const supabase = createClient()
+        const { error } = await supabase
+          .from('materials')
+          .update({ status: 'rejected' })
+          .eq('id', m.id)
+        if (error) throw error
+      },
+      '반려되었어요',
+      '반려 실패'
+    )
   }
 
   const approveEvent = async (e: PendingEvent) => {
     if (!user) return
-    setItemBusy(e.id, true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('events')
-        .update({ approval_status: 'approved', approved_by: user.id })
-        .eq('id', e.id)
-      if (error) throw error
-      await fetchEvents()
-    } catch (err) {
-      console.error('Approve event failed:', err)
-      alert(`승인 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setItemBusy(e.id, false)
-    }
+    await optimisticRemove(
+      e,
+      () => events,
+      setEvents,
+      async () => {
+        const supabase = createClient()
+        const { error } = await supabase
+          .from('events')
+          .update({ approval_status: 'approved', approved_by: user.id })
+          .eq('id', e.id)
+        if (error) throw error
+      },
+      '승인되었어요',
+      '승인 실패'
+    )
   }
 
   const rejectEvent = async (e: PendingEvent) => {
     if (!confirm(`"${e.title}" 공지를 반려할까요?`)) return
-    setItemBusy(e.id, true)
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('events')
-        .update({ approval_status: 'rejected' })
-        .eq('id', e.id)
-      if (error) throw error
-      await fetchEvents()
-    } catch (err) {
-      console.error('Reject event failed:', err)
-      alert(`반려 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setItemBusy(e.id, false)
-    }
+    await optimisticRemove(
+      e,
+      () => events,
+      setEvents,
+      async () => {
+        const supabase = createClient()
+        const { error } = await supabase
+          .from('events')
+          .update({ approval_status: 'rejected' })
+          .eq('id', e.id)
+        if (error) throw error
+      },
+      '반려되었어요',
+      '반려 실패'
+    )
   }
 
   return (
     <div className="space-y-4 p-4">
       <div>
-        <h1 className="text-2xl font-bold text-zinc-900">승인 대시보드</h1>
+        <h1 className="text-xl font-bold tracking-tight text-zinc-900">승인 대시보드</h1>
         <p className="text-sm text-zinc-500">
           반장 · 자료 · 공지 승인 요청을 처리하세요.
         </p>
@@ -601,7 +626,14 @@ export default function AdminDashboardPage() {
             />
           ) : (
             leaders.map((a) => (
-              <Card key={a.id} size="sm" className="px-3 py-3">
+              <Card
+                key={a.id}
+                size="sm"
+                className={cn(
+                  'px-3 py-3 transition-all duration-200',
+                  exitingIds.has(a.id) && 'scale-95 opacity-0'
+                )}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
@@ -657,7 +689,14 @@ export default function AdminDashboardPage() {
             teacherApplicants.map((a) => {
               const isDowngrade = a.teacher_status === 'pending_downgrade'
               return (
-                <Card key={a.id} size="sm" className="px-3 py-3">
+                <Card
+                key={a.id}
+                size="sm"
+                className={cn(
+                  'px-3 py-3 transition-all duration-200',
+                  exitingIds.has(a.id) && 'scale-95 opacity-0'
+                )}
+              >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
@@ -753,7 +792,14 @@ export default function AdminDashboardPage() {
               const before = `${a.grade ?? '?'}학년 ${a.class_number ?? '?'}반`
               const after = `${a.pending_grade ?? a.grade ?? '?'}학년 ${a.pending_class_number ?? a.class_number ?? '?'}반`
               return (
-                <Card key={a.id} size="sm" className="px-3 py-3">
+                <Card
+                key={a.id}
+                size="sm"
+                className={cn(
+                  'px-3 py-3 transition-all duration-200',
+                  exitingIds.has(a.id) && 'scale-95 opacity-0'
+                )}
+              >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
@@ -816,7 +862,14 @@ export default function AdminDashboardPage() {
             />
           ) : (
             materials.map((m) => (
-              <Card key={m.id} size="sm" className="px-3 py-3">
+              <Card
+                key={m.id}
+                size="sm"
+                className={cn(
+                  'px-3 py-3 transition-all duration-200',
+                  exitingIds.has(m.id) && 'scale-95 opacity-0'
+                )}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -893,7 +946,14 @@ export default function AdminDashboardPage() {
             />
           ) : (
             events.map((e) => (
-              <Card key={e.id} size="sm" className="px-3 py-3">
+              <Card
+                key={e.id}
+                size="sm"
+                className={cn(
+                  'px-3 py-3 transition-all duration-200',
+                  exitingIds.has(e.id) && 'scale-95 opacity-0'
+                )}
+              >
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
@@ -1007,11 +1067,11 @@ function MaterialEditDialog({
 
   const save = async () => {
     if (!title.trim()) {
-      alert('제목을 입력해주세요.')
+      toast.error('제목을 입력해주세요.')
       return
     }
     if (!subject || !grade) {
-      alert('과목과 학년을 선택해주세요.')
+      toast.error('과목과 학년을 선택해주세요.')
       return
     }
     setSaving(true)
@@ -1030,9 +1090,10 @@ function MaterialEditDialog({
         .eq('id', material.id)
       if (error) throw error
       await onSaved()
+      toast.success('자료 정보가 저장되었어요')
     } catch (err) {
       console.error('material edit failed:', err)
-      alert(`저장 실패: ${getErrorMessage(err)}`)
+      toast.error(`저장 실패: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)
     }

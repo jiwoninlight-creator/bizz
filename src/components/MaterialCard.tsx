@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { getSubjectColor } from '@/lib/subject-colors'
+import { formatRelativeTime, formatFullDateTime } from '@/lib/format-time'
 import type { MaterialFileType, MaterialWithTeacher } from '@/types/database'
 
 type FileTypeStyle = {
@@ -70,10 +71,6 @@ function isNew(createdAt: string): boolean {
   return Date.now() - created < sevenDays
 }
 
-function formatDate(iso: string): string {
-  const d = new Date(iso)
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`
-}
 
 function inferFilename(url: string): string {
   try {
@@ -190,7 +187,7 @@ export default function MaterialCard({
       size="sm"
       onClick={handleClick}
       title={displayFilename ?? undefined}
-      className="cursor-pointer border border-zinc-200 bg-white shadow-none transition-colors hover:border-zinc-300"
+      className="cursor-pointer border border-zinc-200 bg-white shadow-none transition-all duration-100 hover:border-zinc-300 active:scale-[0.98]"
     >
       <div className="flex items-start gap-3 px-3">
         <div
@@ -285,8 +282,11 @@ export default function MaterialCard({
             </p>
           )}
           <div className="mt-2 flex items-center justify-between border-t border-zinc-100 pt-1.5 text-[11px] text-zinc-400">
-            <span className="font-mono tabular-nums">
-              {formatDate(material.created_at)}
+            <span
+              className="font-mono text-[11px] tabular-nums text-zinc-400"
+              title={formatFullDateTime(material.created_at)}
+            >
+              {formatRelativeTime(material.created_at)}
             </span>
             <span
               className={cn(

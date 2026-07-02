@@ -30,6 +30,7 @@ import type {
   WeekType,
 } from '@/types/database'
 import { cn, getErrorMessage } from '@/lib/utils'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -47,6 +48,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -148,7 +157,7 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6 p-4">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
+        <h1 className="text-xl font-bold tracking-tight text-zinc-900">
           설정
         </h1>
         <p className="mt-0.5 text-sm text-zinc-500">
@@ -224,7 +233,7 @@ function ProfileInfoCard({
 
   const saveName = async () => {
     if (!trimmedName) {
-      alert('이름을 입력해주세요.')
+      toast.error('이름을 입력해주세요.')
       return
     }
     setSavingName(true)
@@ -236,10 +245,10 @@ function ProfileInfoCard({
         .eq('id', user.id)
       if (error) throw error
       await refresh()
-      alert('이름이 저장되었습니다.')
+      toast.success('이름이 저장되었습니다.')
     } catch (err) {
       console.error('save name failed:', err)
-      alert(`저장 실패: ${getErrorMessage(err)}`)
+      toast.error(`저장 실패: ${getErrorMessage(err)}`)
     } finally {
       setSavingName(false)
     }
@@ -369,7 +378,7 @@ function ProfileChangeSection({
       canClass && classSel ? Number(classSel) : profile.class_number ?? null
 
     if (canClass && !classSel) {
-      alert('새로운 반을 선택해주세요.')
+      toast.error('새로운 반을 선택해주세요.')
       return
     }
 
@@ -377,7 +386,7 @@ function ProfileChangeSection({
       (canGrade && nextGrade !== profile.grade) ||
       (canClass && nextClass !== profile.class_number)
     if (!changed) {
-      alert('현재와 다른 값을 선택해주세요.')
+      toast.error('현재와 다른 값을 선택해주세요.')
       return
     }
 
@@ -396,10 +405,10 @@ function ProfileChangeSection({
       if (error) throw error
       await refresh()
       setOpen(false)
-      alert('요청이 접수되었어요. 관리자 승인을 기다려주세요.')
+      toast('요청이 접수되었어요. 관리자 승인을 기다려주세요.')
     } catch (err) {
       console.error('profile change request failed:', err)
-      alert(`요청 실패: ${getErrorMessage(err)}`)
+      toast.error(`요청 실패: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)
     }
@@ -422,7 +431,7 @@ function ProfileChangeSection({
       await refresh()
     } catch (err) {
       console.error('cancel profile change failed:', err)
-      alert(`취소 실패: ${getErrorMessage(err)}`)
+      toast.error(`취소 실패: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)
     }
@@ -623,10 +632,10 @@ function RoleCard({
         .eq('id', profile.id)
       if (error) throw error
       await refresh()
-      alert('신청이 접수되었어요. 관리자 승인을 기다려주세요.')
+      toast('신청이 접수되었어요. 관리자 승인을 기다려주세요.')
     } catch (err) {
       console.error('apply leader failed:', err)
-      alert(`신청 실패: ${getErrorMessage(err)}`)
+      toast.error(`신청 실패: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)
     }
@@ -648,7 +657,7 @@ function RoleCard({
       await refresh()
     } catch (err) {
       console.error('cancel leader failed:', err)
-      alert(`취소 실패: ${getErrorMessage(err)}`)
+      toast.error(`취소 실패: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)
     }
@@ -671,7 +680,7 @@ function RoleCard({
       await refresh()
     } catch (err) {
       console.error('return role failed:', err)
-      alert(`반납 실패: ${getErrorMessage(err)}`)
+      toast.error(`반납 실패: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)
     }
@@ -920,11 +929,11 @@ function TeacherProfileCard({
   const save = async () => {
     const trimmedName = name.trim()
     if (!trimmedName) {
-      alert('이름을 입력해주세요.')
+      toast.error('이름을 입력해주세요.')
       return
     }
     if (!subject) {
-      alert('담당 과목을 선택해주세요.')
+      toast.error('담당 과목을 선택해주세요.')
       return
     }
     setSaving(true)
@@ -955,10 +964,10 @@ function TeacherProfileCard({
         if (error) throw error
       }
       await onUpdated()
-      alert('저장되었습니다.')
+      toast.success('저장되었습니다.')
     } catch (err) {
       console.error('save teacher profile failed:', err)
-      alert(`저장 실패: ${getErrorMessage(err)}`)
+      toast.error(`저장 실패: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)
     }
@@ -981,7 +990,7 @@ function TeacherProfileCard({
       await onUpdated()
     } catch (err) {
       console.error('quick status update failed:', err)
-      alert(`상태 변경 실패: ${getErrorMessage(err)}`)
+      toast.error(`상태 변경 실패: ${getErrorMessage(err)}`)
       setStatus(prev)
     }
   }
@@ -1002,10 +1011,10 @@ function TeacherProfileCard({
         .eq('id', user.id)
       if (error) throw error
       await refresh()
-      alert('학생 계정 전환 요청이 접수되었어요.')
+      toast('학생 계정 전환 요청이 접수되었어요.')
     } catch (err) {
       console.error('downgrade request failed:', err)
-      alert(`요청 실패: ${getErrorMessage(err)}`)
+      toast.error(`요청 실패: ${getErrorMessage(err)}`)
     } finally {
       setDowngradeSaving(false)
     }
@@ -1024,7 +1033,7 @@ function TeacherProfileCard({
       await refresh()
     } catch (err) {
       console.error('cancel downgrade failed:', err)
-      alert(`취소 실패: ${getErrorMessage(err)}`)
+      toast.error(`취소 실패: ${getErrorMessage(err)}`)
     } finally {
       setDowngradeSaving(false)
     }
@@ -1530,7 +1539,7 @@ function ScheduleCellDialog({
           }
         }
         if (weekType !== 'all' && usedTypes.has(weekType)) {
-          alert(
+          toast.error(
             `이 시간에 이미 ${weekType === 'odd' ? '홀수주' : '짝수주'} 수업이 있어요. 좌측 목록에서 선택해 수정하세요.`
           )
           setSaving(false)
@@ -1564,9 +1573,10 @@ function ScheduleCellDialog({
 
       await onSaved()
       onOpenChange(false)
+      toast.success(selectedId ? '시간표가 저장되었어요' : '시간표가 추가되었어요')
     } catch (err) {
       console.error('schedule save failed:', err)
-      alert(`저장 실패: ${getErrorMessage(err)}`)
+      toast.error(`저장 실패: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)
     }
@@ -1592,24 +1602,24 @@ function ScheduleCellDialog({
       }
     } catch (err) {
       console.error('schedule delete failed:', err)
-      alert(`삭제 실패: ${getErrorMessage(err)}`)
+      toast.error(`삭제 실패: ${getErrorMessage(err)}`)
     } finally {
       setBusyId(null)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
-        <DialogHeader>
-          <DialogTitle>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="rounded-t-2xl">
+        <SheetHeader>
+          <SheetTitle>
             {DAY_LABELS[day - 1]}요일 {period}교시
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription>
             수업/반/팀 이름, 교실, 주기를 입력하세요. 격주면 홀/짝 각각 등록할 수
             있어요.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         {existing.length > 0 && (
           <div className="flex flex-wrap gap-1.5">
@@ -1732,7 +1742,7 @@ function ScheduleCellDialog({
           </div>
         </div>
 
-        <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+        <SheetFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
           <div>
             {selectedId && (
               <Button
@@ -1778,9 +1788,9 @@ function ScheduleCellDialog({
               )}
             </Button>
           </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -1810,7 +1820,7 @@ function TeacherApplyCard({
 
   const apply = async () => {
     if (!subject) {
-      alert('담당 과목을 선택해주세요.')
+      toast.error('담당 과목을 선택해주세요.')
       return
     }
     if (!confirm('선생님 계정을 신청할까요? 관리자 승인을 기다려주세요.')) return
@@ -1854,10 +1864,10 @@ function TeacherApplyCard({
       setOpen(false)
       setSubject('')
       setOffice('')
-      alert('신청이 접수되었어요. 관리자 승인을 기다려주세요.')
+      toast('신청이 접수되었어요. 관리자 승인을 기다려주세요.')
     } catch (err) {
       console.error('teacher apply failed:', err)
-      alert(`신청 실패: ${getErrorMessage(err)}`)
+      toast.error(`신청 실패: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)
     }
@@ -1886,7 +1896,7 @@ function TeacherApplyCard({
       await Promise.all([refresh(), onUpdated()])
     } catch (err) {
       console.error('teacher cancel failed:', err)
-      alert(`취소 실패: ${getErrorMessage(err)}`)
+      toast.error(`취소 실패: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)
     }
@@ -2043,7 +2053,7 @@ function DangerZoneCard({
       router.refresh()
     } catch (err) {
       console.error('delete account failed:', err)
-      alert(`삭제 실패: ${getErrorMessage(err)}`)
+      toast.error(`삭제 실패: ${getErrorMessage(err)}`)
       setDeleting(false)
     }
   }

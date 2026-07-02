@@ -57,7 +57,7 @@ export default function BottomTabBar({
               key={tab.href}
               href={tab.href}
               className={cn(
-                'group relative flex flex-1 flex-col items-center justify-center gap-1 py-2.5 transition-colors',
+                'group relative flex flex-1 flex-col items-center justify-center gap-1 py-2.5 transition-all duration-100 active:scale-[0.98]',
                 isActive
                   ? 'text-zinc-900'
                   : 'text-zinc-400 hover:text-zinc-600'

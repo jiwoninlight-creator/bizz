@@ -27,6 +27,7 @@ import type {
 import MaterialCard from '@/components/MaterialCard'
 import EmptyState from '@/components/EmptyState'
 import { cn, getErrorMessage } from '@/lib/utils'
+import { toast } from 'sonner'
 import { getSubjectColor } from '@/lib/subject-colors'
 import { Card } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -50,6 +51,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 
 type StatusMeta = {
   label: string
@@ -132,7 +141,7 @@ function TeacherCard({
     <Card
       size="sm"
       onClick={onClick}
-      className="cursor-pointer border border-zinc-200 shadow-none transition-colors hover:border-zinc-300 active:scale-[0.995]"
+      className="cursor-pointer border border-zinc-200 shadow-none transition-all duration-100 hover:border-zinc-300 active:scale-[0.98]"
     >
       <div className="flex items-center gap-3 px-3">
         <Avatar className="h-12 w-12 shrink-0">
@@ -562,12 +571,12 @@ function MessageDialog({
         body: body.trim(),
       })
       if (error) throw error
-      alert('메시지를 보냈어요!')
+      toast.success('메시지를 보냈어요!')
       resetForm()
       onSent()
     } catch (err) {
       console.error('Send message failed:', err)
-      alert(`전송에 실패했어요: ${getErrorMessage(err)}`)
+      toast.error(`전송에 실패했어요: ${getErrorMessage(err)}`)
     } finally {
       setSubmitting(false)
     }
@@ -577,14 +586,14 @@ function MessageDialog({
     title.trim().length > 0 && body.trim().length > 0 && !submitting
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>{teacher.name} 선생님께 메시지</DialogTitle>
-          <DialogDescription>
+    <Sheet open={open} onOpenChange={handleOpenChange}>
+      <SheetContent side="bottom" className="rounded-t-2xl sm:max-w-lg sm:mx-auto">
+        <SheetHeader>
+          <SheetTitle>{teacher.name} 선생님께 메시지</SheetTitle>
+          <SheetDescription>
             톤과 목적을 골라 정리된 메시지를 보내세요.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="grid grid-cols-2 gap-2">
@@ -646,7 +655,7 @@ function MessageDialog({
             />
           </div>
 
-          <DialogFooter>
+          <SheetFooter>
             <Button
               type="button"
               variant="outline"
@@ -665,10 +674,10 @@ function MessageDialog({
                 '보내기'
               )}
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }
 
@@ -773,9 +782,7 @@ function TeachersInner() {
   const handleSendMessage = () => {
     if (!selected) return
     if (!selected.user_id) {
-      alert(
-        '선생님이 아직 앱에 가입하지 않으셨어요. 나중에 다시 시도해주세요.'
-      )
+      toast('선생님이 아직 앱에 가입하지 않으셨어요. 나중에 다시 시도해주세요.')
       return
     }
     setDetailOpen(false)
@@ -784,7 +791,7 @@ function TeachersInner() {
 
   return (
     <div className="p-4 space-y-4">
-      <h1 className="text-2xl font-bold text-zinc-900">선생님 찾기</h1>
+      <h1 className="text-xl font-bold tracking-tight text-zinc-900">선생님 찾기</h1>
 
       <div className="relative">
         <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
