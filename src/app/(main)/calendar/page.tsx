@@ -5,6 +5,7 @@ import {
   AlertTriangleIcon,
   BellIcon,
   CalendarIcon,
+  CalendarOffIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
   ClockIcon,
@@ -35,6 +36,7 @@ import type {
 } from '@/types/database'
 import { cn, getErrorMessage } from '@/lib/utils'
 import { SCHOOL_PERIODS, findPeriodByValue } from '@/lib/school-schedule'
+import EmptyState from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -2026,9 +2028,12 @@ function EventListSection({
 }) {
   if (events.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-zinc-200 py-10 text-center text-sm text-zinc-400">
-        {LIST_CATEGORY_LABELS[type]} 일정이 없어요
-      </div>
+      <EmptyState
+        icon={CalendarOffIcon}
+        title={`${LIST_CATEGORY_LABELS[type]} 일정이 없어요`}
+        description="새 일정을 추가해서 학기 흐름을 챙겨보세요."
+        compact
+      />
     )
   }
   return (

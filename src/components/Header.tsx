@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import {
   ClockIcon,
   LogOutIcon,
+  SearchIcon,
   SettingsIcon,
   ShieldIcon,
 } from 'lucide-react'
@@ -22,6 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import CommandSearch from '@/components/CommandSearch'
 import type { Teacher, TeacherStatus, User } from '@/types/database'
 
 const STATUS_DOT: Record<TeacherStatus, string> = {
@@ -112,6 +114,7 @@ export default function Header() {
   const router = useRouter()
   const { user, profile, isAdmin, isTeacher } = useUser()
   const [myTeacher, setMyTeacher] = useState<Teacher | null>(null)
+  const [searchOpen, setSearchOpen] = useState(false)
 
   useEffect(() => {
     if (!isTeacher || !user?.id) {
@@ -126,6 +129,18 @@ export default function Header() {
       .maybeSingle<Teacher>()
       .then(({ data }) => setMyTeacher(data ?? null))
   }, [isTeacher, user?.id])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      // Cmd/Ctrl+K opens the command search
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSearchOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   const handleLogout = async () => {
     const supabase = createClient()
@@ -172,6 +187,19 @@ export default function Header() {
               )}
             </>
           ) : null}
+
+          <button
+            type="button"
+            onClick={() => setSearchOpen(true)}
+            className={cn(
+              'ml-1 flex h-8 w-8 items-center justify-center rounded-md border border-zinc-200 bg-white text-zinc-500 outline-none transition-colors hover:bg-zinc-50 hover:text-zinc-800',
+              'focus-visible:ring-2 focus-visible:ring-zinc-400 focus-visible:ring-offset-2'
+            )}
+            aria-label="검색"
+            title="검색 (Ctrl+K)"
+          >
+            <SearchIcon className="h-3.5 w-3.5" />
+          </button>
 
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -239,6 +267,8 @@ export default function Header() {
           </DropdownMenu>
         </div>
       </div>
+
+      <CommandSearch open={searchOpen} onOpenChange={setSearchOpen} />
     </header>
   )
 }

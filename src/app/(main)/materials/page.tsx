@@ -2,23 +2,24 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
+  FileXIcon,
+  LayersIcon,
   Loader2Icon,
   PlusIcon,
   SearchIcon,
-  UsersIcon,
-  LayoutGridIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase-client'
 import { useUser } from '@/hooks/useUser'
 import { getErrorMessage, cn } from '@/lib/utils'
+import { getSubjectColor, SUBJECT_ORDER } from '@/lib/subject-colors'
 import type {
   MaterialFileType,
   MaterialWithTeacher,
   Teacher,
 } from '@/types/database'
 import MaterialCard from '@/components/MaterialCard'
+import EmptyState from '@/components/EmptyState'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -530,145 +531,278 @@ export default function MaterialsPage() {
     [curriculumMaterials, gradeFilter]
   )
 
-  return (
-    <div className="p-4 space-y-4">
-      <div className="space-y-3">
-        <h1 className="text-2xl font-bold text-zinc-900">수업 자료</h1>
+  // 사이드바에 보여줄 과목별 개수 (해당 학년 필터 반영). 존재하는 과목만 표시.
+  const subjectCounts = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const m of gradeFilteredCurriculum) {
+      map.set(m.subject, (map.get(m.subject) ?? 0) + 1)
+    }
+    return map
+  }, [gradeFilteredCurriculum])
 
-        <div className="inline-flex w-full items-center rounded-lg border border-zinc-200 bg-white p-0.5">
-          <button
-            type="button"
-            onClick={() => setViewMode('curriculum')}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-[13px] font-medium transition-colors',
-              viewMode === 'curriculum'
-                ? 'bg-zinc-900 text-white'
-                : 'text-zinc-500 hover:text-zinc-800'
-            )}
-          >
-            <LayoutGridIcon className="h-3.5 w-3.5" />
-            교과자료
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode('additional')}
-            className={cn(
-              'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-[13px] font-medium transition-colors',
-              viewMode === 'additional'
-                ? 'bg-zinc-900 text-white'
-                : 'text-zinc-500 hover:text-zinc-800'
-            )}
-          >
-            <UsersIcon className="h-3.5 w-3.5" />
-            추가자료
-          </button>
-        </div>
+  const additionalCount = useMemo(
+    () =>
+      additionalMaterials.filter(
+        (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
+      ).length,
+    [additionalMaterials, gradeFilter]
+  )
 
-        <div className="flex gap-2">
-          <Select
-            value={gradeFilter}
-            onValueChange={(v) =>
-              setGradeFilter(v as 'all' | '1' | '2' | '3')
-            }
-          >
-            <SelectTrigger className="w-24 h-9">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">전체</SelectItem>
-              <SelectItem value="1">1학년</SelectItem>
-              <SelectItem value="2">2학년</SelectItem>
-              <SelectItem value="3">3학년</SelectItem>
-            </SelectContent>
-          </Select>
+  const availableSubjects = useMemo(() => {
+    const ordered = SUBJECT_ORDER.filter((s) => (subjectCounts.get(s) ?? 0) > 0)
+    return ordered
+  }, [subjectCounts])
 
-          <div className="relative flex-1">
-            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
-            <Input
-              type="search"
-              placeholder="제목·과목으로 검색"
-              className="h-9 pl-8"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-        </div>
+  // 사이드바 선택 상태를 viewMode + subjectFilter로부터 파생
+  const sidebarKey: string =
+    viewMode === 'additional' ? '__additional__' : subjectFilter
+  const selectAll = () => {
+    setViewMode('curriculum')
+    setSubjectFilter('all')
+  }
+  const selectSubject = (s: string) => {
+    setViewMode('curriculum')
+    setSubjectFilter(s)
+  }
+  const selectAdditional = () => {
+    setViewMode('additional')
+  }
 
-        {viewMode === 'curriculum' && (
-          <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1">
-            <SubjectChip
-              label="전체"
-              active={subjectFilter === 'all'}
-              onClick={() => setSubjectFilter('all')}
-            />
-            {SUBJECT_OPTIONS.map((s) => (
-              <SubjectChip
-                key={s}
-                label={s}
-                active={subjectFilter === s}
-                onClick={() => setSubjectFilter(s)}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+  const canRegisterMaterial = !!user
 
-      {loading ? (
+  const renderContent = () => {
+    if (loading) {
+      return (
         <div className="flex items-center justify-center py-16 text-zinc-400">
           <Loader2Icon className="mr-2 h-5 w-5 animate-spin" />
           <span className="text-sm">불러오는 중…</span>
         </div>
-      ) : viewMode === 'curriculum' ? (
-        subjectFilter === 'all' ? (
-          gradeFilteredCurriculum.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <p className="text-sm text-zinc-500">등록된 교과자료가 없어요</p>
-              <p className="mt-1 text-xs text-zinc-400">
-                우측 하단 버튼으로 자료를 등록해보세요
-              </p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {gradeFilteredCurriculum.map((m) => (
-                <MaterialCard
-                  key={m.id}
-                  material={m}
-                  currentUserId={user?.id}
-                  canDelete={canDeleteMaterial(m)}
-                  onDelete={handleDelete}
-                  canEdit={canEditMaterial(m)}
-                  onEdit={handleEdit}
-                />
-              ))}
-            </div>
-          )
-        ) : (
-          <CurriculumBySubject
-            subject={subjectFilter}
-            data={curriculumBySubject}
-            gradeFilter={gradeFilter}
-            currentUserId={user?.id}
-            canDelete={canDeleteMaterial}
-            onDelete={handleDelete}
-            canEdit={canEditMaterial}
-            onEdit={handleEdit}
+      )
+    }
+    if (viewMode === 'additional') {
+      const links = linkMaterials.filter(
+        (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
+      )
+      const files = supplementaryFiles.filter(
+        (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
+      )
+      if (links.length === 0 && files.length === 0) {
+        return (
+          <EmptyState
+            icon={FileXIcon}
+            title="등록된 추가자료가 없어요"
+            description="🔗 링크나 📎 참고 파일을 등록해보세요. 학년 필터를 낮춰보는 것도 방법이에요."
+            action={
+              canRegisterMaterial
+                ? {
+                    label: '자료 등록',
+                    onClick: openDialog,
+                    icon: PlusIcon,
+                  }
+                : undefined
+            }
           />
         )
-      ) : (
+      }
+      return (
         <AdditionalTab
-          links={linkMaterials.filter(
-            (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
-          )}
-          files={supplementaryFiles.filter(
-            (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
-          )}
+          links={links}
+          files={files}
           currentUserId={user?.id}
           canDelete={canDeleteMaterial}
           onDelete={handleDelete}
           canEdit={canEditMaterial}
           onEdit={handleEdit}
         />
-      )}
+      )
+    }
+    // curriculum
+    if (subjectFilter === 'all') {
+      if (gradeFilteredCurriculum.length === 0) {
+        return (
+          <EmptyState
+            icon={FileXIcon}
+            title="등록된 교과자료가 없어요"
+            description="첫 자료를 등록해서 학생/동료들과 공유해보세요."
+            action={
+              canRegisterMaterial
+                ? {
+                    label: '자료 등록',
+                    onClick: openDialog,
+                    icon: PlusIcon,
+                  }
+                : undefined
+            }
+          />
+        )
+      }
+      return (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {gradeFilteredCurriculum.map((m) => (
+            <MaterialCard
+              key={m.id}
+              material={m}
+              currentUserId={user?.id}
+              canDelete={canDeleteMaterial(m)}
+              onDelete={handleDelete}
+              canEdit={canEditMaterial(m)}
+              onEdit={handleEdit}
+            />
+          ))}
+        </div>
+      )
+    }
+    // curriculum + specific subject
+    const data = curriculumBySubject
+    const commonFiltered = (data?.commonList ?? []).filter(
+      (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
+    )
+    const teacherEntries = (data?.teachers ?? []).map((t) => {
+      const list = (data?.byTeacher.get(t.id) ?? []).filter(
+        (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
+      )
+      return { teacher: t, list }
+    })
+    const teachersFiltered = teacherEntries.filter((x) => x.list.length > 0)
+    if (commonFiltered.length === 0 && teachersFiltered.length === 0) {
+      return (
+        <EmptyState
+          icon={FileXIcon}
+          title={`${subjectFilter} 자료가 아직 없어요`}
+          description="다른 과목을 둘러보거나 첫 자료를 등록해보세요."
+          action={
+            canRegisterMaterial
+              ? {
+                  label: '자료 등록',
+                  onClick: openDialog,
+                  icon: PlusIcon,
+                }
+              : undefined
+          }
+        />
+      )
+    }
+    return (
+      <CurriculumBySubject
+        subject={subjectFilter}
+        commonList={commonFiltered}
+        teachersFiltered={teachersFiltered}
+        currentUserId={user?.id}
+        canDelete={canDeleteMaterial}
+        onDelete={handleDelete}
+        canEdit={canEditMaterial}
+        onEdit={handleEdit}
+      />
+    )
+  }
+
+  return (
+    <div className="p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
+          수업 자료
+        </h1>
+      </div>
+
+      {/* Mobile: horizontal subject chips (sticky) */}
+      <div className="-mx-4 sticky top-14 z-10 mb-3 border-b border-zinc-100 bg-white/95 px-4 pb-2 backdrop-blur md:hidden">
+        <div className="flex gap-1.5 overflow-x-auto py-1">
+          <SidebarChipButton
+            active={sidebarKey === 'all'}
+            onClick={selectAll}
+            label="전체"
+            icon={<LayersIcon className="h-3.5 w-3.5" />}
+          />
+          {availableSubjects.map((s) => (
+            <SidebarChipButton
+              key={s}
+              subject={s}
+              active={sidebarKey === s}
+              onClick={() => selectSubject(s)}
+              label={s}
+              count={subjectCounts.get(s)}
+            />
+          ))}
+          <span className="mx-1 h-6 w-px shrink-0 self-center bg-zinc-200" />
+          <SidebarChipButton
+            active={sidebarKey === '__additional__'}
+            onClick={selectAdditional}
+            label="🔗 추가자료"
+            count={additionalCount}
+          />
+        </div>
+      </div>
+
+      <div className="flex gap-6 md:flex-row">
+        {/* Desktop sidebar */}
+        <aside className="hidden md:block md:sticky md:top-16 md:h-fit md:w-44 md:shrink-0">
+          <nav className="space-y-0.5">
+            <SidebarRow
+              active={sidebarKey === 'all'}
+              onClick={selectAll}
+              icon={<LayersIcon className="h-3.5 w-3.5" strokeWidth={1.75} />}
+              label="전체"
+              count={gradeFilteredCurriculum.length}
+            />
+            {availableSubjects.length > 0 && (
+              <div className="my-1 border-t border-zinc-100" />
+            )}
+            {availableSubjects.map((s) => (
+              <SidebarRow
+                key={s}
+                active={sidebarKey === s}
+                onClick={() => selectSubject(s)}
+                subject={s}
+                label={s}
+                count={subjectCounts.get(s) ?? 0}
+              />
+            ))}
+            <div className="my-1 border-t border-zinc-100" />
+            <SidebarRow
+              active={sidebarKey === '__additional__'}
+              onClick={selectAdditional}
+              label="🔗 추가자료"
+              count={additionalCount}
+            />
+          </nav>
+        </aside>
+
+        <main className="min-w-0 flex-1 space-y-4">
+          {/* Sticky filter bar */}
+          <div className="sticky top-14 z-10 -mx-4 border-b border-zinc-100 bg-white/95 px-4 py-2 backdrop-blur md:top-16 md:mx-0 md:rounded-lg md:border md:border-zinc-200 md:bg-white md:px-3 md:backdrop-blur-none">
+            <div className="flex gap-2">
+              <div className="relative flex-1">
+                <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
+                <Input
+                  type="search"
+                  placeholder="제목·과목으로 검색"
+                  className="h-9 pl-8"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </div>
+              <Select
+                value={gradeFilter}
+                onValueChange={(v) =>
+                  setGradeFilter(v as 'all' | '1' | '2' | '3')
+                }
+              >
+                <SelectTrigger className="h-9 w-24">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">전체</SelectItem>
+                  <SelectItem value="1">1학년</SelectItem>
+                  <SelectItem value="2">2학년</SelectItem>
+                  <SelectItem value="3">3학년</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {renderContent()}
+        </main>
+      </div>
 
       <Button
         onClick={openDialog}
@@ -729,27 +863,101 @@ export default function MaterialsPage() {
 
 /* ------------------------------ Subcomponents ------------------------------ */
 
-function SubjectChip({
-  label,
+function SidebarRow({
   active,
   onClick,
+  label,
+  icon,
+  subject,
+  count,
 }: {
-  label: string
   active: boolean
   onClick: () => void
+  label: string
+  icon?: React.ReactNode
+  subject?: string
+  count?: number
 }) {
+  const color = subject ? getSubjectColor(subject) : null
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        'shrink-0 rounded-md border px-2.5 py-1 text-[11px] font-medium transition-colors',
+        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors duration-150',
         active
-          ? 'border-zinc-900 bg-zinc-900 text-white'
-          : 'border-zinc-200 bg-white text-zinc-600 hover:border-zinc-300 hover:text-zinc-900'
+          ? 'bg-zinc-100 font-medium text-zinc-900'
+          : 'text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900'
       )}
     >
-      {label}
+      {icon}
+      {color && (
+        <span
+          className={cn(
+            'inline-block h-2 w-2 shrink-0 rounded-full',
+            color.dot
+          )}
+        />
+      )}
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {typeof count === 'number' && count > 0 && (
+        <span
+          className={cn(
+            'ml-1 shrink-0 text-[10px] font-medium tabular-nums',
+            active ? 'text-zinc-500' : 'text-zinc-400'
+          )}
+        >
+          {count}
+        </span>
+      )}
+    </button>
+  )
+}
+
+function SidebarChipButton({
+  active,
+  onClick,
+  label,
+  icon,
+  subject,
+  count,
+}: {
+  active: boolean
+  onClick: () => void
+  label: string
+  icon?: React.ReactNode
+  subject?: string
+  count?: number
+}) {
+  const color = subject ? getSubjectColor(subject) : null
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-medium transition-colors duration-150',
+        active
+          ? 'border-zinc-900 bg-zinc-900 text-white'
+          : 'border-zinc-200 bg-white text-zinc-700 hover:border-zinc-300 hover:bg-zinc-50'
+      )}
+    >
+      {icon}
+      {color && !active && (
+        <span
+          className={cn('inline-block h-1.5 w-1.5 rounded-full', color.dot)}
+        />
+      )}
+      <span>{label}</span>
+      {typeof count === 'number' && count > 0 && (
+        <span
+          className={cn(
+            'text-[10px] font-normal tabular-nums',
+            active ? 'text-white/70' : 'text-zinc-400'
+          )}
+        >
+          {count}
+        </span>
+      )}
     </button>
   )
 }
@@ -815,8 +1023,8 @@ function TeacherSection({
 
 function CurriculumBySubject({
   subject,
-  data,
-  gradeFilter,
+  commonList,
+  teachersFiltered,
   currentUserId,
   canDelete,
   onDelete,
@@ -824,55 +1032,33 @@ function CurriculumBySubject({
   onEdit,
 }: {
   subject: string
-  data: {
-    commonList: MaterialWithTeacher[]
-    teachers: Teacher[]
-    byTeacher: Map<string, MaterialWithTeacher[]>
-  } | null
-  gradeFilter: 'all' | '1' | '2' | '3'
+  commonList: MaterialWithTeacher[]
+  teachersFiltered: { teacher: Teacher; list: MaterialWithTeacher[] }[]
   currentUserId?: string
   canDelete: (m: MaterialWithTeacher) => boolean
   onDelete: (m: MaterialWithTeacher) => void
   canEdit: (m: MaterialWithTeacher) => boolean
   onEdit: (m: MaterialWithTeacher) => void
 }) {
-  if (!data) return null
-  const commonFiltered = data.commonList.filter(
-    (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
-  )
-  const teachersWithMaterials = data.teachers
-    .map((t) => {
-      const list = (data.byTeacher.get(t.id) ?? []).filter(
-        (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
-      )
-      return { teacher: t, list }
-    })
-    .filter((x) => x.list.length > 0)
-
-  if (commonFiltered.length === 0 && teachersWithMaterials.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-16 text-center">
-        <p className="text-sm text-zinc-500">
-          {subject} 자료가 아직 없어요
-        </p>
-      </div>
-    )
-  }
-
+  const color = getSubjectColor(subject)
   return (
     <div className="space-y-5">
-      {commonFiltered.length > 0 && (
+      <div className="flex items-center gap-2">
+        <span className={cn('inline-block h-2 w-2 rounded-full', color.dot)} />
+        <h2 className="text-lg font-semibold tracking-tight text-zinc-900">
+          {subject}
+        </h2>
+      </div>
+      {commonList.length > 0 && (
         <section className="space-y-2">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-zinc-800">
-              교과서 · 공통자료
-            </h2>
-            <span className="text-xs text-zinc-400">
-              {commonFiltered.length}개
-            </span>
+            <h3 className="text-sm font-semibold text-zinc-800">
+              📘 공통 · 교과서
+            </h3>
+            <span className="text-xs text-zinc-400">{commonList.length}개</span>
           </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {commonFiltered.map((m) => (
+          <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
+            {commonList.map((m) => (
               <MaterialCard
                 key={m.id}
                 material={m}
@@ -888,16 +1074,16 @@ function CurriculumBySubject({
         </section>
       )}
 
-      {teachersWithMaterials.length > 0 && (
+      {teachersFiltered.length > 0 && (
         <section className="space-y-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-zinc-800">선생님별</h2>
+            <h3 className="text-sm font-semibold text-zinc-800">선생님별</h3>
             <span className="text-xs text-zinc-400">
-              {teachersWithMaterials.length}명
+              {teachersFiltered.length}명
             </span>
           </div>
           <div className="space-y-3">
-            {teachersWithMaterials.map(({ teacher, list }) => (
+            {teachersFiltered.map(({ teacher, list }) => (
               <TeacherSection
                 key={teacher.id}
                 teacher={teacher}

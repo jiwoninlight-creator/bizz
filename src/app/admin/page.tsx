@@ -3,16 +3,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   ArrowRightIcon,
+  BellIcon,
   CheckIcon,
   ExternalLinkIcon,
+  FileTextIcon,
+  GraduationCapIcon,
   Loader2Icon,
   PencilIcon,
   UserIcon,
+  UserRoundIcon,
   XIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase-client'
 import { getErrorMessage } from '@/lib/utils'
 import { useUser } from '@/hooks/useUser'
+import SharedEmptyState from '@/components/EmptyState'
 import type {
   ClassLeaderType,
   Event,
@@ -588,7 +593,12 @@ export default function AdminDashboardPage() {
           {loadingLeaders ? (
             <LoadingState />
           ) : leaders.length === 0 ? (
-            <EmptyState message="반장 승인 대기 신청이 없어요" />
+            <SharedEmptyState
+              icon={UserIcon}
+              title="반장 승인 대기 신청이 없어요"
+              description="새 신청이 들어오면 여기 표시돼요."
+              compact
+            />
           ) : (
             leaders.map((a) => (
               <Card key={a.id} size="sm" className="px-3 py-3">
@@ -637,7 +647,12 @@ export default function AdminDashboardPage() {
           {loadingTeachers ? (
             <LoadingState />
           ) : teacherApplicants.length === 0 ? (
-            <EmptyState message="선생님 승인 대기 신청이 없어요" />
+            <SharedEmptyState
+              icon={GraduationCapIcon}
+              title="선생님 승인 대기 신청이 없어요"
+              description="새 신청과 학생 전환 요청이 여기 나타나요."
+              compact
+            />
           ) : (
             teacherApplicants.map((a) => {
               const isDowngrade = a.teacher_status === 'pending_downgrade'
@@ -727,7 +742,12 @@ export default function AdminDashboardPage() {
           {loadingProfileChanges ? (
             <LoadingState />
           ) : profileChanges.length === 0 ? (
-            <EmptyState message="정보 변경 요청이 없어요" />
+            <SharedEmptyState
+              icon={UserRoundIcon}
+              title="정보 변경 요청이 없어요"
+              description="학생 정보 변경 요청이 들어오면 여기서 승인할 수 있어요."
+              compact
+            />
           ) : (
             profileChanges.map((a) => {
               const before = `${a.grade ?? '?'}학년 ${a.class_number ?? '?'}반`
@@ -788,7 +808,12 @@ export default function AdminDashboardPage() {
           {loadingMaterials ? (
             <LoadingState />
           ) : materials.length === 0 ? (
-            <EmptyState message="자료 승인 대기가 없어요" />
+            <SharedEmptyState
+              icon={FileTextIcon}
+              title="자료 승인 대기가 없어요"
+              description="학생이 올린 자료가 있으면 여기서 승인해요."
+              compact
+            />
           ) : (
             materials.map((m) => (
               <Card key={m.id} size="sm" className="px-3 py-3">
@@ -860,7 +885,12 @@ export default function AdminDashboardPage() {
           {loadingEvents ? (
             <LoadingState />
           ) : events.length === 0 ? (
-            <EmptyState message="공지 승인 대기가 없어요" />
+            <SharedEmptyState
+              icon={BellIcon}
+              title="공지 승인 대기가 없어요"
+              description="선생님/반장이 등록한 공유 일정이 여기 나타나요."
+              compact
+            />
           ) : (
             events.map((e) => (
               <Card key={e.id} size="sm" className="px-3 py-3">
@@ -1161,10 +1191,3 @@ function LoadingState() {
   )
 }
 
-function EmptyState({ message }: { message: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-zinc-200 py-10 text-center text-sm text-zinc-400">
-      {message}
-    </div>
-  )
-}

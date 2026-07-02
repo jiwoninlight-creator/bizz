@@ -1,7 +1,8 @@
 'use client'
 
-import { Fragment, useEffect, useMemo, useState } from 'react'
+import { Fragment, Suspense, useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import {
   SearchIcon,
@@ -10,6 +11,7 @@ import {
   MapPinIcon,
   Loader2Icon,
   FileTextIcon,
+  UsersRoundIcon,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase-client'
 import { useUser } from '@/hooks/useUser'
@@ -23,7 +25,9 @@ import type {
   WeekType,
 } from '@/types/database'
 import MaterialCard from '@/components/MaterialCard'
+import EmptyState from '@/components/EmptyState'
 import { cn, getErrorMessage } from '@/lib/utils'
+import { getSubjectColor } from '@/lib/subject-colors'
 import { Card } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -152,9 +156,25 @@ function TeacherCard({
               title={STATUS_META[teacher.current_status].label}
             />
           </div>
-          <p className="text-sm text-zinc-500">{teacher.subject}</p>
+          <div className="mt-1 flex flex-wrap items-center gap-1.5">
+            {(() => {
+              const c = getSubjectColor(teacher.subject)
+              return (
+                <span
+                  className={cn(
+                    'inline-flex h-5 items-center rounded-md border px-1.5 text-[11px] font-medium',
+                    c.bg,
+                    c.text,
+                    c.border
+                  )}
+                >
+                  {teacher.subject}
+                </span>
+              )
+            })()}
+          </div>
           {teacher.office_location && (
-            <p className="mt-0.5 flex items-center gap-1 text-xs text-zinc-400">
+            <p className="mt-1 flex items-center gap-1 text-xs text-zinc-400">
               <MapPinIcon className="h-3 w-3" />
               {teacher.office_location}
             </p>
@@ -371,7 +391,21 @@ function TeacherDetailDialog({
                 {teacher.name} 선생님
               </DialogTitle>
               <div className="mt-1.5 flex flex-wrap gap-1.5">
-                <Badge variant="secondary">{teacher.subject}</Badge>
+                {(() => {
+                  const c = getSubjectColor(teacher.subject)
+                  return (
+                    <span
+                      className={cn(
+                        'inline-flex h-5 items-center rounded-md border px-1.5 text-[11px] font-medium',
+                        c.bg,
+                        c.text,
+                        c.border
+                      )}
+                    >
+                      {teacher.subject}
+                    </span>
+                  )
+                })()}
                 <span
                   className={cn(
                     'inline-flex h-5 items-center gap-1 rounded-full px-2 text-[10px] font-medium',
@@ -639,7 +673,26 @@ function MessageDialog({
 }
 
 export default function TeachersPage() {
+  return (
+    <Suspense fallback={<TeachersLoading />}>
+      <TeachersInner />
+    </Suspense>
+  )
+}
+
+function TeachersLoading() {
+  return (
+    <div className="flex items-center justify-center py-20 text-zinc-400">
+      <Loader2Icon className="mr-2 h-5 w-5 animate-spin" />
+      <span className="text-sm">불러오는 중…</span>
+    </div>
+  )
+}
+
+function TeachersInner() {
   const { user } = useUser()
+  const params = useSearchParams()
+  const teacherIdParam = params.get('teacher')
 
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [loading, setLoading] = useState(true)
@@ -649,6 +702,16 @@ export default function TeachersPage() {
   const [selected, setSelected] = useState<Teacher | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
   const [messageOpen, setMessageOpen] = useState(false)
+
+  // ?teacher=<id> 로 진입 시 해당 선생님 상세 자동 오픈
+  useEffect(() => {
+    if (!teacherIdParam || teachers.length === 0) return
+    const t = teachers.find((x) => x.id === teacherIdParam)
+    if (t) {
+      setSelected(t)
+      setDetailOpen(true)
+    }
+  }, [teacherIdParam, teachers])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search.trim()), 300)
@@ -740,14 +803,17 @@ export default function TeachersPage() {
           <span className="text-sm">불러오는 중…</span>
         </div>
       ) : teachers.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-center">
-          <p className="text-sm text-zinc-500">선생님 정보가 없어요</p>
-          {debouncedSearch && (
-            <p className="mt-1 text-xs text-zinc-400">
-              검색어를 다시 확인해보세요
-            </p>
-          )}
-        </div>
+        <EmptyState
+          icon={UsersRoundIcon}
+          title={
+            debouncedSearch ? '검색 결과가 없어요' : '선생님 정보가 없어요'
+          }
+          description={
+            debouncedSearch
+              ? '다른 이름이나 과목으로 다시 검색해보세요.'
+              : '아직 등록된 선생님이 없어요. 관리자에게 문의해주세요.'
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {teachers.map((t) => (

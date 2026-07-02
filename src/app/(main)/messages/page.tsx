@@ -23,6 +23,7 @@ import { createClient } from '@/lib/supabase-client'
 import { useUser } from '@/hooks/useUser'
 import type { Message, MessagePurpose, MessageTone } from '@/types/database'
 import { cn, getErrorMessage } from '@/lib/utils'
+import EmptyState from '@/components/EmptyState'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -318,9 +319,12 @@ function MessagesInner() {
               <span className="text-sm">불러오는 중…</span>
             </div>
           ) : conversations.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-zinc-200 py-10 text-center text-sm text-zinc-400">
-              아직 대화가 없어요
-            </div>
+            <EmptyState
+              icon={MessagesSquareIcon}
+              title="아직 대화가 없어요"
+              description="학생들이 보낸 메시지가 여기 나타나요. 답장은 원한 톤/목적으로 편안하게."
+              compact
+            />
           ) : (
             <ul className="divide-y divide-zinc-100 overflow-hidden rounded-lg border border-zinc-200 bg-white">
               {conversations.map((c) => (

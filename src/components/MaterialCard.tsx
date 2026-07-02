@@ -15,6 +15,7 @@ import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { getSubjectColor } from '@/lib/subject-colors'
 import type { MaterialFileType, MaterialWithTeacher } from '@/types/database'
 
 type FileTypeStyle = {
@@ -242,18 +243,31 @@ export default function MaterialCard({
               )}
             </div>
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-zinc-500">
-            <span className="font-medium text-zinc-700">{material.subject}</span>
+          <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-zinc-500">
+            {(() => {
+              const c = getSubjectColor(material.subject)
+              return (
+                <span
+                  className={cn(
+                    'inline-flex h-5 items-center rounded-md border px-1.5 text-[10px] font-medium',
+                    c.bg,
+                    c.text,
+                    c.border
+                  )}
+                >
+                  {material.subject}
+                </span>
+              )
+            })()}
             {material.teacher?.name && (
-              <>
-                <span className="text-zinc-300">·</span>
-                <span>{material.teacher.name} 선생님</span>
-              </>
+              <span className="text-zinc-500">
+                {material.teacher.name} 선생님
+              </span>
             )}
             {material.category && material.category !== material.subject && (
               <>
                 <span className="text-zinc-300">·</span>
-                <span>{material.category}</span>
+                <span className="text-zinc-500">{material.category}</span>
               </>
             )}
           </div>

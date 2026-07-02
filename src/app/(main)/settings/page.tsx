@@ -1265,22 +1265,20 @@ function TeacherScheduleCard({
       <CardContent>
         <div className="overflow-x-auto">
           <div className="min-w-[520px]">
-            {/* Header row */}
             <div className="grid grid-cols-6 gap-1">
-              <div className="h-8" />
+              <div className="h-7" />
               {DAY_LABELS.map((d) => (
                 <div
                   key={d}
-                  className="flex h-8 items-center justify-center text-xs font-semibold text-zinc-600"
+                  className="flex h-7 items-center justify-center text-[11px] font-semibold text-zinc-500"
                 >
                   {d}
                 </div>
               ))}
             </div>
-            {/* Body rows */}
             {PERIODS.map((p) => (
               <div key={p} className="mt-1 grid grid-cols-6 gap-1">
-                <div className="flex h-16 items-center justify-center text-[11px] font-medium text-zinc-500">
+                <div className="flex h-16 items-center justify-center text-[10px] font-medium tabular-nums text-zinc-400">
                   {p}교시
                 </div>
                 {DAY_LABELS.map((_, dayIdx) => {
@@ -1332,15 +1330,17 @@ function ScheduleCell({
       <button
         type="button"
         onClick={onOpen}
-        className="flex h-16 flex-col items-center justify-center rounded-md border border-dashed border-zinc-200 bg-zinc-50 text-zinc-400 transition-colors hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-500"
+        className="group flex h-16 items-center justify-center rounded-md border border-zinc-100 bg-zinc-50/50 text-zinc-300 transition-colors duration-150 hover:bg-zinc-100"
         aria-label="시간표 추가"
       >
-        <PlusIcon className="h-3.5 w-3.5" />
+        <PlusIcon
+          className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100"
+          strokeWidth={1.75}
+        />
       </button>
     )
   }
 
-  // 홀/짝이 각각 있는 경우 상하로 분할해서 표시
   const odd = items.find((i) => i.week_type === 'odd')
   const even = items.find((i) => i.week_type === 'even')
   const all = items.find((i) => i.week_type === 'all')
@@ -1350,12 +1350,12 @@ function ScheduleCell({
       <button
         type="button"
         onClick={onOpen}
-        className="flex h-16 flex-col items-center justify-center gap-0.5 rounded-md border border-indigo-200 bg-indigo-50 px-1 text-center text-indigo-900 transition-colors hover:border-indigo-300 hover:bg-indigo-100"
+        className="flex h-16 flex-col justify-center gap-0.5 rounded-md border border-zinc-200 bg-white px-1.5 text-left transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50"
       >
-        <span className="line-clamp-1 text-[11px] font-semibold leading-tight">
+        <span className="line-clamp-1 text-[11px] font-medium leading-tight text-zinc-900">
           {all.group_name || all.classroom}
         </span>
-        <span className="line-clamp-1 text-[9px] leading-tight text-indigo-700/80">
+        <span className="line-clamp-1 text-[10px] leading-tight text-zinc-400">
           {all.classroom}
         </span>
       </button>
@@ -1367,37 +1367,51 @@ function ScheduleCell({
     <button
       type="button"
       onClick={onOpen}
-      className="flex h-16 flex-col overflow-hidden rounded-md border border-indigo-200 bg-white text-indigo-900 transition-colors hover:border-indigo-300"
+      className="flex h-16 flex-col overflow-hidden rounded-md border border-zinc-200 bg-white transition-colors duration-150 hover:border-zinc-300"
     >
-      <div
-        className={cn(
-          'flex flex-1 items-center gap-0.5 px-1 text-center',
-          odd
-            ? 'bg-indigo-50'
-            : 'bg-zinc-50 text-zinc-400 border-b border-dashed border-zinc-200'
-        )}
-      >
-        <span className="shrink-0 rounded-sm bg-indigo-500 px-0.5 text-[8px] font-bold text-white">
-          홀
-        </span>
-        <span className="line-clamp-1 flex-1 text-left text-[10px] font-medium leading-tight">
-          {odd ? odd.group_name || odd.classroom : '비어 있음'}
-        </span>
-      </div>
-      <div
-        className={cn(
-          'flex flex-1 items-center gap-0.5 px-1 text-center',
-          even ? 'bg-indigo-50/70' : 'bg-zinc-50 text-zinc-400'
-        )}
-      >
-        <span className="shrink-0 rounded-sm bg-indigo-400 px-0.5 text-[8px] font-bold text-white">
-          짝
-        </span>
-        <span className="line-clamp-1 flex-1 text-left text-[10px] font-medium leading-tight">
-          {even ? even.group_name || even.classroom : '비어 있음'}
-        </span>
-      </div>
+      <BiWeeklyRow item={odd} kind="odd" />
+      <div className="h-px w-full bg-zinc-100" />
+      <BiWeeklyRow item={even} kind="even" />
     </button>
+  )
+}
+
+function BiWeeklyRow({
+  item,
+  kind,
+}: {
+  item: TeacherSchedule | undefined
+  kind: 'odd' | 'even'
+}) {
+  const dotStyle =
+    kind === 'odd'
+      ? 'bg-indigo-100 text-indigo-700'
+      : 'bg-amber-100 text-amber-700'
+  return (
+    <div className="flex flex-1 items-center gap-1 px-1.5 text-left">
+      <span
+        className={cn(
+          'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold',
+          dotStyle
+        )}
+      >
+        {kind === 'odd' ? '홀' : '짝'}
+      </span>
+      {item ? (
+        <div className="min-w-0 flex-1 leading-tight">
+          <div className="line-clamp-1 text-[10px] font-medium text-zinc-900">
+            {item.group_name || item.classroom}
+          </div>
+          {item.group_name && item.classroom !== item.group_name && (
+            <div className="line-clamp-1 text-[9px] text-zinc-400">
+              {item.classroom}
+            </div>
+          )}
+        </div>
+      ) : (
+        <span className="text-[10px] text-zinc-300">비어 있음</span>
+      )}
+    </div>
   )
 }
 
