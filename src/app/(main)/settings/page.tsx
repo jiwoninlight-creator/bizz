@@ -1262,19 +1262,54 @@ function TeacherScheduleCard({
     setSaving(true)
     try {
       const supabase = createClient()
-      const { error } = await supabase.from('teacher_schedules').insert({
+      const payload = {
         teacher_id: teacherId,
         day_of_week: Number(day),
         period: Number(period),
         classroom: classroom.trim(),
         grade: Number(grade),
         class_number: Number(classNumber),
-      })
-      if (error) throw error
+      }
+
+      // 같은 (teacher_id, day_of_week, period) 조합이 이미 있으면 UPDATE, 아니면 INSERT
+      const { data: existing, error: findErr } = await supabase
+        .from('teacher_schedules')
+        .select('id')
+        .eq('teacher_id', payload.teacher_id)
+        .eq('day_of_week', payload.day_of_week)
+        .eq('period', payload.period)
+        .maybeSingle<{ id: string }>()
+      if (findErr) throw findErr
+
+      if (existing) {
+        if (
+          !confirm(
+            `${DAY_LABELS[payload.day_of_week - 1]}요일 ${payload.period}교시에 이미 시간표가 있어요. 덮어쓸까요?`
+          )
+        ) {
+          setSaving(false)
+          return
+        }
+        const { error: updErr } = await supabase
+          .from('teacher_schedules')
+          .update({
+            classroom: payload.classroom,
+            grade: payload.grade,
+            class_number: payload.class_number,
+          })
+          .eq('id', existing.id)
+        if (updErr) throw updErr
+      } else {
+        const { error: insErr } = await supabase
+          .from('teacher_schedules')
+          .insert(payload)
+        if (insErr) throw insErr
+      }
+
       await onUpdated()
       cancelAdd()
     } catch (err) {
-      console.error('schedule insert failed:', err)
+      console.error('schedule save failed:', err)
       alert(`추가 실패: ${getErrorMessage(err)}`)
     } finally {
       setSaving(false)

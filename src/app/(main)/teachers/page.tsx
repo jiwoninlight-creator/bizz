@@ -1,10 +1,12 @@
 'use client'
 
 import { Fragment, useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import type { User as SupabaseUser } from '@supabase/supabase-js'
 import {
   SearchIcon,
   MessageCircleIcon,
+  MessagesSquareIcon,
   MapPinIcon,
   Loader2Icon,
   FileTextIcon,
@@ -401,7 +403,19 @@ function TeacherDetailDialog({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-col gap-2 sm:flex-row">
+          {teacher.user_id && (
+            <Button
+              asChild
+              variant="outline"
+              className="w-full sm:w-auto"
+            >
+              <Link href={`/messages?with=${teacher.user_id}`}>
+                <MessagesSquareIcon className="h-4 w-4" />
+                <span className="ml-1">대화 내역 보기</span>
+              </Link>
+            </Button>
+          )}
           <Button onClick={onSendMessage} className="w-full sm:w-auto">
             <MessageCircleIcon className="h-4 w-4" />
             <span className="ml-1">메시지 보내기</span>

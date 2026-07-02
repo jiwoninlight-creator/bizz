@@ -2,7 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { CalendarIcon, FolderOpenIcon, UsersIcon } from 'lucide-react'
+import {
+  CalendarIcon,
+  FolderOpenIcon,
+  MessageCircleIcon,
+  UsersIcon,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type Tab = {
@@ -11,20 +16,40 @@ type Tab = {
   icon: React.ComponentType<{ className?: string; strokeWidth?: number }>
 }
 
-const TABS: Tab[] = [
+const BASE_TABS: Tab[] = [
   { href: '/teachers', label: '선생님', icon: UsersIcon },
   { href: '/calendar', label: '일정', icon: CalendarIcon },
   { href: '/materials', label: '자료', icon: FolderOpenIcon },
 ]
 
-export default function BottomTabBar({ userRole }: { userRole: string }) {
-  void userRole
+const MESSAGES_TAB: Tab = {
+  href: '/messages',
+  label: '메시지',
+  icon: MessageCircleIcon,
+}
+
+export default function BottomTabBar({
+  userRole,
+  teacherStatus,
+}: {
+  userRole: string
+  teacherStatus?: string | null
+}) {
   const pathname = usePathname()
+
+  // 선생님(승인 완료) 또는 관리자에게만 메시지 탭 노출
+  const showMessages =
+    userRole === 'admin' ||
+    (userRole === 'teacher' && teacherStatus === 'approved')
+
+  const tabs: Tab[] = showMessages
+    ? [...BASE_TABS, MESSAGES_TAB]
+    : BASE_TABS
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-30 border-t border-zinc-200 bg-white">
       <div className="mx-auto flex max-w-2xl">
-        {TABS.map((tab) => {
+        {tabs.map((tab) => {
           const isActive = pathname.startsWith(tab.href)
           const Icon = tab.icon
           return (

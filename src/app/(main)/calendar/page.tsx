@@ -10,10 +10,16 @@ import {
   ClockIcon,
   EyeIcon,
   EyeOffIcon,
+  FileEditIcon,
+  GraduationCapIcon,
   ListIcon,
   Loader2Icon,
+  PalmtreeIcon,
+  PartyPopperIcon,
   PencilIcon,
   PlusIcon,
+  SchoolIcon,
+  SparklesIcon,
   StickyNoteIcon,
   Trash2Icon,
 } from 'lucide-react'
@@ -24,6 +30,8 @@ import type {
   Event,
   EventScope,
   EventType,
+  SchoolEvent,
+  SchoolEventCategory,
 } from '@/types/database'
 import { cn, getErrorMessage } from '@/lib/utils'
 import { SCHOOL_PERIODS, findPeriodByValue } from '@/lib/school-schedule'
@@ -95,6 +103,73 @@ const EVENT_TYPE_META: Record<EventType, EventTypeMeta> = {
 }
 
 const EVENT_TYPE_ORDER: EventType[] = ['assignment', 'exam', 'personal']
+
+type SchoolEventCategoryMeta = {
+  label: string
+  Icon: React.ComponentType<{ className?: string }>
+  cellBg: string
+  cellText: string
+  cardBg: string
+  cardBorder: string
+  cardText: string
+  chipBg: string
+}
+
+const SCHOOL_CATEGORY_META: Record<
+  SchoolEventCategory,
+  SchoolEventCategoryMeta
+> = {
+  holiday: {
+    label: '휴일',
+    Icon: PalmtreeIcon,
+    cellBg: 'bg-red-50',
+    cellText: 'text-red-600',
+    cardBg: 'bg-red-50',
+    cardBorder: 'border-red-200',
+    cardText: 'text-red-800',
+    chipBg: 'bg-red-100 text-red-700 border-red-200',
+  },
+  exam: {
+    label: '시험',
+    Icon: FileEditIcon,
+    cellBg: 'bg-orange-50',
+    cellText: 'text-orange-700',
+    cardBg: 'bg-orange-50',
+    cardBorder: 'border-orange-200',
+    cardText: 'text-orange-800',
+    chipBg: 'bg-orange-100 text-orange-700 border-orange-200',
+  },
+  special: {
+    label: '특별일정',
+    Icon: SparklesIcon,
+    cellBg: 'bg-blue-50',
+    cellText: 'text-blue-700',
+    cardBg: 'bg-blue-50',
+    cardBorder: 'border-blue-200',
+    cardText: 'text-blue-800',
+    chipBg: 'bg-blue-100 text-blue-700 border-blue-200',
+  },
+  vacation_start: {
+    label: '방학',
+    Icon: GraduationCapIcon,
+    cellBg: 'bg-purple-50',
+    cellText: 'text-purple-700',
+    cardBg: 'bg-purple-50',
+    cardBorder: 'border-purple-200',
+    cardText: 'text-purple-800',
+    chipBg: 'bg-purple-100 text-purple-700 border-purple-200',
+  },
+  ceremony: {
+    label: '행사',
+    Icon: PartyPopperIcon,
+    cellBg: 'bg-green-50',
+    cellText: 'text-green-700',
+    cardBg: 'bg-green-50',
+    cardBorder: 'border-green-200',
+    cardText: 'text-green-800',
+    chipBg: 'bg-green-100 text-green-700 border-green-200',
+  },
+}
 
 const LIST_CATEGORY_LABELS: Record<EventType, string> = {
   assignment: '과제',
@@ -231,6 +306,7 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [memos, setMemos] = useState<DailyMemo[]>([])
   const [completions, setCompletions] = useState<Set<string>>(new Set())
+  const [schoolEvents, setSchoolEvents] = useState<SchoolEvent[]>([])
   const [loading, setLoading] = useState(true)
   const [listCategory, setListCategory] = useState<EventType>('assignment')
   const [showCompleted, setShowCompleted] = useState(false)
@@ -312,16 +388,31 @@ export default function CalendarPage() {
       .select('event_id')
       .eq('user_id', user.id)
 
+    const schoolEventsPromise = supabase
+      .from('school_events')
+      .select('*')
+      .gte('event_date', startKey)
+      .lte('event_date', endKey)
+      .order('event_date', { ascending: true })
+
     const [
       { data: eventData, error: eventError },
       { data: memoData, error: memoError },
       { data: completionData, error: completionError },
-    ] = await Promise.all([eventsPromise, memosPromise, completionsPromise])
+      { data: schoolEventData, error: schoolEventError },
+    ] = await Promise.all([
+      eventsPromise,
+      memosPromise,
+      completionsPromise,
+      schoolEventsPromise,
+    ])
 
     if (eventError) console.error('events fetch failed:', eventError)
     if (memoError) console.error('memos fetch failed:', memoError)
     if (completionError)
       console.error('completions fetch failed:', completionError)
+    if (schoolEventError)
+      console.error('school_events fetch failed:', schoolEventError)
 
     setEvents((eventData ?? []) as Event[])
     setMemos((memoData ?? []) as DailyMemo[])
@@ -330,6 +421,7 @@ export default function CalendarPage() {
         ((completionData ?? []) as { event_id: string }[]).map((c) => c.event_id)
       )
     )
+    setSchoolEvents((schoolEventData ?? []) as SchoolEvent[])
     setLoading(false)
   }, [
     gridStart,
@@ -448,6 +540,16 @@ export default function CalendarPage() {
     return map
   }, [events])
 
+  const schoolEventsByDate = useMemo(() => {
+    const map = new Map<string, SchoolEvent[]>()
+    for (const s of schoolEvents) {
+      const list = map.get(s.event_date) ?? []
+      list.push(s)
+      map.set(s.event_date, list)
+    }
+    return map
+  }, [schoolEvents])
+
   const memoByDate = useMemo(() => {
     const map = new Map<string, DailyMemo>()
     for (const m of memos) map.set(m.memo_date, m)
@@ -496,6 +598,7 @@ export default function CalendarPage() {
     ? allSelectedEvents.filter((e) => isEventCompleted(e))
     : allSelectedEvents.filter((e) => !isEventCompleted(e))
   const selectedMemo = memoByDate.get(selectedDateKey)
+  const selectedSchoolEvents = schoolEventsByDate.get(selectedDateKey) ?? []
 
   const canEditEvent = useCallback(
     (event: Event): boolean => {
@@ -1056,6 +1159,11 @@ export default function CalendarPage() {
                 const typesInDay = new Set(visibleDay.map((e) => e.event_type))
                 const dayOfWeek = d.getDay()
                 const hasMemo = memoByDate.has(key)
+                const daySchool = schoolEventsByDate.get(key) ?? []
+                const primarySchool = daySchool[0]
+                const schoolMeta = primarySchool
+                  ? SCHOOL_CATEGORY_META[primarySchool.category]
+                  : null
                 const col = idx % 7
                 const row = Math.floor(idx / 7)
                 const rows = Math.ceil(gridDays.length / 7)
@@ -1070,6 +1178,8 @@ export default function CalendarPage() {
                       col !== 6 && 'border-r border-zinc-100',
                       row !== rows - 1 && 'border-b border-zinc-100',
                       'hover:bg-zinc-50',
+                      // 학사일정 배경 (선택되지 않은 날짜에만 은은하게)
+                      !isSelected && schoolMeta && schoolMeta.cellBg,
                       isSelected && 'bg-indigo-50 hover:bg-indigo-50',
                       !inMonth && 'text-zinc-300',
                       inMonth && dayOfWeek === 0 && 'text-red-500',
@@ -1078,8 +1188,18 @@ export default function CalendarPage() {
                         dayOfWeek !== 0 &&
                         dayOfWeek !== 6 &&
                         'text-zinc-800',
+                      inMonth &&
+                        !isSelected &&
+                        schoolMeta &&
+                        primarySchool?.category === 'holiday' &&
+                        'text-red-600',
                       isSelected && 'font-semibold text-indigo-700'
                     )}
+                    title={
+                      daySchool.length > 0
+                        ? daySchool.map((s) => s.title).join(' · ')
+                        : undefined
+                    }
                   >
                     <span
                       className={cn(
@@ -1095,6 +1215,20 @@ export default function CalendarPage() {
                     </span>
                     {hasMemo && (
                       <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-indigo-400" />
+                    )}
+                    {daySchool.length > 0 && (
+                      <div
+                        className={cn(
+                          'mt-0.5 line-clamp-1 w-full px-0.5 text-center text-[9px] font-medium leading-tight',
+                          !isSelected && schoolMeta
+                            ? schoolMeta.cellText
+                            : 'text-zinc-600',
+                          isSelected && 'text-indigo-700'
+                        )}
+                      >
+                        {primarySchool?.title}
+                        {daySchool.length > 1 && ` +${daySchool.length - 1}`}
+                      </div>
                     )}
                     <div className="mt-auto mb-1 flex h-1 items-center gap-0.5">
                       {EVENT_TYPE_ORDER.map((t) =>
@@ -1114,6 +1248,10 @@ export default function CalendarPage() {
               })}
             </div>
           </div>
+
+          {selectedSchoolEvents.length > 0 && (
+            <SchoolEventSection events={selectedSchoolEvents} />
+          )}
 
           <MemoSection
             memo={selectedMemo}
@@ -1532,6 +1670,74 @@ function EmptyBox({ message }: { message: string }) {
   return (
     <div className="rounded-lg border border-dashed border-zinc-200 py-8 text-center text-sm text-zinc-400">
       {message}
+    </div>
+  )
+}
+
+function SchoolEventSection({ events }: { events: SchoolEvent[] }) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-1.5 text-sm font-semibold text-zinc-800">
+        <SchoolIcon className="h-4 w-4 text-zinc-500" />
+        <span>학교 일정</span>
+        <span className="text-xs font-normal text-zinc-400">
+          {events.length}개
+        </span>
+      </div>
+      <ul className="space-y-1.5">
+        {events.map((s) => {
+          const meta = SCHOOL_CATEGORY_META[s.category]
+          const Icon = meta.Icon
+          return (
+            <li
+              key={s.id}
+              className={cn(
+                'flex items-start gap-2.5 rounded-lg border px-3 py-2',
+                meta.cardBg,
+                meta.cardBorder
+              )}
+            >
+              <span
+                className={cn(
+                  'mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md border',
+                  meta.chipBg
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </span>
+              <div className="min-w-0 flex-1 leading-tight">
+                <div
+                  className={cn(
+                    'text-sm font-semibold',
+                    meta.cardText
+                  )}
+                >
+                  {s.title}
+                </div>
+                <div
+                  className={cn(
+                    'mt-0.5 flex items-center gap-1 text-[11px]',
+                    meta.cardText,
+                    'opacity-80'
+                  )}
+                >
+                  <span
+                    className={cn(
+                      'inline-flex h-4 items-center rounded-md border px-1 text-[10px] font-medium',
+                      meta.chipBg
+                    )}
+                  >
+                    {meta.label}
+                  </span>
+                  {s.description && (
+                    <span className="line-clamp-1">{s.description}</span>
+                  )}
+                </div>
+              </div>
+            </li>
+          )
+        })}
+      </ul>
     </div>
   )
 }

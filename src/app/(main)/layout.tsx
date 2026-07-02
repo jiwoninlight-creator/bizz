@@ -23,7 +23,10 @@ export default async function MainLayout({
     <div className="min-h-screen bg-[#FAFAFA] pb-20">
       <Header />
       <main className="mx-auto max-w-2xl">{children}</main>
-      <BottomTabBar userRole={profile?.role || 'student'} />
+      <BottomTabBar
+        userRole={profile?.role || 'student'}
+        teacherStatus={profile?.teacher_status ?? null}
+      />
     </div>
   )
 }

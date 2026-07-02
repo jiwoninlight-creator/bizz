@@ -145,3 +145,18 @@ export type EventCompletion = {
   user_id: string
   completed_at: string
 }
+
+export type SchoolEventCategory =
+  | 'holiday'
+  | 'exam'
+  | 'special'
+  | 'vacation_start'
+  | 'ceremony'
+
+export type SchoolEvent = {
+  id: string
+  title: string
+  event_date: string
+  category: SchoolEventCategory
+  description: string | null
+}
