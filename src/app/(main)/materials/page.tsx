@@ -45,6 +45,10 @@ const SUBJECT_OPTIONS = [
   '과학',
   '사회',
   '역사',
+  '물리',
+  '화학',
+  '생물',
+  '지구과학',
   '기타',
 ] as const
 
@@ -54,7 +58,10 @@ const CATEGORY_OPTIONS = [
   '시험지',
   '참고자료',
   '기타',
+  '추가자료',
 ] as const
+
+const SUPPLEMENTARY_CATEGORY = '추가자료'
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024
 
@@ -98,7 +105,8 @@ function extractStoragePath(url: string): string | null {
   }
 }
 
-type ViewMode = 'all' | 'by-teacher'
+type ViewMode = 'curriculum' | 'additional'
+type UploadMode = 'file' | 'link'
 
 export default function MaterialsPage() {
   const {
@@ -114,7 +122,7 @@ export default function MaterialsPage() {
   const [teachers, setTeachers] = useState<Teacher[]>([])
   const [myTeacher, setMyTeacher] = useState<Teacher | null>(null)
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<ViewMode>('all')
+  const [viewMode, setViewMode] = useState<ViewMode>('curriculum')
   const [gradeFilter, setGradeFilter] = useState<'all' | '1' | '2' | '3'>('all')
   const [subjectFilter, setSubjectFilter] = useState<string>('all')
   const [gradeFilterInitialized, setGradeFilterInitialized] = useState(false)
@@ -130,6 +138,8 @@ export default function MaterialsPage() {
   const [formClassNumber, setFormClassNumber] = useState<string>('')
   const [formCategory, setFormCategory] = useState<string>('수업자료')
   const [formFile, setFormFile] = useState<File | null>(null)
+  const [uploadMode, setUploadMode] = useState<UploadMode>('file')
+  const [formLinkUrl, setFormLinkUrl] = useState<string>('')
 
   const [editingMaterial, setEditingMaterial] = useState<MaterialWithTeacher | null>(
     null
@@ -202,7 +212,8 @@ export default function MaterialsPage() {
     }
 
     if (debouncedSearch) {
-      query = query.ilike('title', `%${debouncedSearch}%`)
+      const term = debouncedSearch.replace(/[%,]/g, '')
+      query = query.or(`title.ilike.%${term}%,subject.ilike.%${term}%`)
     }
 
     const { data, error } = await query
@@ -227,90 +238,129 @@ export default function MaterialsPage() {
   }, [fetchMaterials])
 
   const openDialog = () => {
+    setFormFile(null)
+    setUploadMode('file')
+    setFormLinkUrl('')
+    setFormCategory('수업자료')
+    setFormClassNumber('')
+    setFormTitle('')
+
     if (isTeacher && myTeacher) {
-      setFormTitle('')
       setFormSubject(myTeacher.subject)
       setFormTeacherId(myTeacher.id)
       const grades = myTeacher.managed_grades ?? []
       setFormGrade(String(grades[0] ?? profile?.grade ?? 1))
-      setFormClassNumber('')
-      setFormCategory('수업자료')
-      setFormFile(null)
     } else if (isAdmin) {
-      setFormTitle('')
       setFormSubject('')
       setFormTeacherId('')
       setFormGrade(String(profile?.grade ?? 1))
-      setFormClassNumber('')
-      setFormCategory('수업자료')
-      setFormFile(null)
     } else {
-      setFormTitle('')
       setFormSubject('')
       setFormTeacherId('')
       setFormGrade(profile?.grade ? String(profile.grade) : '1')
-      setFormClassNumber('')
-      setFormCategory('수업자료')
-      setFormFile(null)
     }
     setDialogOpen(true)
   }
+
+  const isSupplementary = formCategory === SUPPLEMENTARY_CATEGORY
+  const isLinkMode = isSupplementary && uploadMode === 'link'
 
   const canSubmit = useMemo(() => {
     if (submitting) return false
     if (formTitle.trim().length === 0) return false
     if (formSubject.length === 0) return false
     if (formGrade.length === 0) return false
-    if (formFile === null) return false
+    if (isLinkMode) {
+      if (formLinkUrl.trim().length === 0) return false
+    } else {
+      if (formFile === null) return false
+    }
     return true
-  }, [formTitle, formSubject, formGrade, formFile, submitting])
+  }, [
+    formTitle,
+    formSubject,
+    formGrade,
+    formFile,
+    formLinkUrl,
+    isLinkMode,
+    submitting,
+  ])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!user || !formFile) return
-
-    if (formFile.size > MAX_FILE_SIZE) {
-      alert('50MB 이하 파일만 업로드할 수 있습니다')
-      return
-    }
+    if (!user) return
 
     setSubmitting(true)
     try {
       const supabase = createClient()
-      const safeName = sanitizeStorageFilename(formFile.name)
-      const path = `${user.id}/${Date.now()}_${safeName}`
-
-      const { error: uploadError } = await supabase.storage
-        .from('materials')
-        .upload(path, formFile, {
-          cacheControl: '3600',
-          upsert: false,
-        })
-      if (uploadError) throw uploadError
-
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from('materials').getPublicUrl(path)
-
       const willAutoApprove = isAdmin || isTeacher
+      const isTextbook = formCategory === '교과서'
 
-      const { error: insertError } = await supabase.from('materials').insert({
+      const commonPayload = {
         title: formTitle.trim(),
         subject: formSubject,
-        teacher_id: formTeacherId || null,
+        // 교과서는 선생님 무관
+        teacher_id: isTextbook ? null : formTeacherId || null,
         grade: Number(formGrade),
         class_number: formClassNumber ? Number(formClassNumber) : null,
         category: formCategory || null,
-        file_url: publicUrl,
-        file_type: getFileType(formFile.name),
-        file_size: formFile.size,
-        original_filename: formFile.name,
         uploaded_by: user.id,
         status: willAutoApprove ? 'approved' : 'pending',
         approved_by: willAutoApprove ? user.id : null,
         approved_at: willAutoApprove ? new Date().toISOString() : null,
-      })
-      if (insertError) throw insertError
+        is_supplementary: isSupplementary,
+      }
+
+      if (isLinkMode) {
+        const url = formLinkUrl.trim()
+        try {
+          new URL(url)
+        } catch {
+          alert('올바른 링크 주소를 입력해주세요 (http/https).')
+          setSubmitting(false)
+          return
+        }
+        const { error: insertError } = await supabase.from('materials').insert({
+          ...commonPayload,
+          file_url: url,
+          file_type: 'link',
+          file_size: 0,
+          original_filename: null,
+          link_url: url,
+        })
+        if (insertError) throw insertError
+      } else {
+        if (!formFile) return
+        if (formFile.size > MAX_FILE_SIZE) {
+          alert('50MB 이하 파일만 업로드할 수 있습니다')
+          setSubmitting(false)
+          return
+        }
+        const safeName = sanitizeStorageFilename(formFile.name)
+        const path = `${user.id}/${Date.now()}_${safeName}`
+
+        const { error: uploadError } = await supabase.storage
+          .from('materials')
+          .upload(path, formFile, {
+            cacheControl: '3600',
+            upsert: false,
+          })
+        if (uploadError) throw uploadError
+
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from('materials').getPublicUrl(path)
+
+        const { error: insertError } = await supabase.from('materials').insert({
+          ...commonPayload,
+          file_url: publicUrl,
+          file_type: getFileType(formFile.name),
+          file_size: formFile.size,
+          original_filename: formFile.name,
+          link_url: null,
+        })
+        if (insertError) throw insertError
+      }
 
       setDialogOpen(false)
       alert(
@@ -357,19 +407,28 @@ export default function MaterialsPage() {
   )
 
   const handleDelete = async (m: MaterialWithTeacher) => {
-    if (!confirm(`"${m.title}" 자료를 삭제할까요?\n\nStorage의 파일도 함께 삭제돼요.`))
+    const isLink = m.file_type === 'link'
+    if (
+      !confirm(
+        isLink
+          ? `"${m.title}" 링크를 삭제할까요?`
+          : `"${m.title}" 자료를 삭제할까요?\n\nStorage의 파일도 함께 삭제돼요.`
+      )
+    )
       return
     try {
       const supabase = createClient()
 
-      // Storage에서 파일 삭제 (실패해도 DB row 삭제는 진행)
-      const storagePath = extractStoragePath(m.file_url)
-      if (storagePath) {
-        const { error: storageErr } = await supabase.storage
-          .from('materials')
-          .remove([storagePath])
-        if (storageErr) {
-          console.warn('Storage delete failed (continuing):', storageErr)
+      if (!isLink) {
+        // Storage에서 파일 삭제 (실패해도 DB row 삭제는 진행)
+        const storagePath = extractStoragePath(m.file_url)
+        if (storagePath) {
+          const { error: storageErr } = await supabase.storage
+            .from('materials')
+            .remove([storagePath])
+          if (storageErr) {
+            console.warn('Storage delete failed (continuing):', storageErr)
+          }
         }
       }
 
@@ -389,14 +448,17 @@ export default function MaterialsPage() {
     setEditingMaterial(m)
   }
 
-  // ---------------- Derived data for by-teacher view ----------------
+  // ---------------- Derived data ----------------
 
-  const uniqueSubjects = useMemo(() => {
-    const set = new Set<string>()
-    for (const t of teachers) set.add(t.subject)
-    for (const m of materials) if (m.subject) set.add(m.subject)
-    return Array.from(set).sort()
-  }, [teachers, materials])
+  // 교과자료 / 추가자료 분리
+  const curriculumMaterials = useMemo(
+    () => materials.filter((m) => !m.is_supplementary),
+    [materials]
+  )
+  const additionalMaterials = useMemo(
+    () => materials.filter((m) => m.is_supplementary),
+    [materials]
+  )
 
   const teachersBySubject = useMemo(() => {
     const map = new Map<string, Teacher[]>()
@@ -408,33 +470,65 @@ export default function MaterialsPage() {
     return map
   }, [teachers])
 
-  const materialsByTeacher = useMemo(() => {
-    const map = new Map<string, MaterialWithTeacher[]>()
-    const commonKey = '__common__'
-    for (const m of materials) {
-      if (m.status !== 'approved') continue
-      if (debouncedSearch) {
-        if (!m.title.toLowerCase().includes(debouncedSearch.toLowerCase())) {
-          continue
-        }
-      }
-      const key = m.teacher_id ?? commonKey
-      const arr = map.get(key) ?? []
+  // 교과자료: subject 선택 시 표시할 그룹 데이터 구성
+  const curriculumBySubject = useMemo(() => {
+    if (subjectFilter === 'all') return null
+    const subj = subjectFilter
+    // 이 과목과 매칭되는 자료 (subject 일치)
+    const relevant = curriculumMaterials.filter(
+      (m) =>
+        m.subject === subj &&
+        (m.status === 'approved' ||
+          m.uploaded_by === user?.id ||
+          isAdmin ||
+          isClassLeader)
+    )
+    // 교과서/공통(teacher_id 없거나 category='교과서') 은 별도 섹션
+    const commonList = relevant.filter(
+      (m) => !m.teacher_id || m.category === '교과서'
+    )
+    const teacherIds = Array.from(
+      new Set(relevant.filter((m) => !!m.teacher_id).map((m) => m.teacher_id!))
+    )
+    // 이 과목 소속 선생님 목록에 자료가 있는 선생님만
+    const subjectTeachers = teachers.filter((t) => teacherIds.includes(t.id))
+    const materialsByTeacherMap = new Map<string, MaterialWithTeacher[]>()
+    for (const m of relevant) {
+      if (!m.teacher_id || m.category === '교과서') continue
+      const arr = materialsByTeacherMap.get(m.teacher_id) ?? []
       arr.push(m)
-      map.set(key, arr)
+      materialsByTeacherMap.set(m.teacher_id, arr)
     }
-    return map
-  }, [materials, debouncedSearch])
+    return {
+      commonList,
+      teachers: subjectTeachers,
+      byTeacher: materialsByTeacherMap,
+    }
+  }, [
+    subjectFilter,
+    curriculumMaterials,
+    teachers,
+    user?.id,
+    isAdmin,
+    isClassLeader,
+  ])
 
-  const visibleSubjects = useMemo(
-    () =>
-      subjectFilter === 'all'
-        ? uniqueSubjects
-        : uniqueSubjects.filter((s) => s === subjectFilter),
-    [uniqueSubjects, subjectFilter]
+  const linkMaterials = useMemo(
+    () => additionalMaterials.filter((m) => m.file_type === 'link'),
+    [additionalMaterials]
+  )
+  const supplementaryFiles = useMemo(
+    () => additionalMaterials.filter((m) => m.file_type !== 'link'),
+    [additionalMaterials]
   )
 
-  const commonMaterials = materialsByTeacher.get('__common__') ?? []
+  const gradeFilteredCurriculum = useMemo(
+    () =>
+      curriculumMaterials.filter(
+        (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
+      ),
+    [curriculumMaterials, gradeFilter]
+  )
 
   return (
     <div className="p-4 space-y-4">
@@ -444,29 +538,29 @@ export default function MaterialsPage() {
         <div className="inline-flex w-full items-center rounded-lg border border-zinc-200 bg-white p-0.5">
           <button
             type="button"
-            onClick={() => setViewMode('all')}
+            onClick={() => setViewMode('curriculum')}
             className={cn(
               'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-[13px] font-medium transition-colors',
-              viewMode === 'all'
+              viewMode === 'curriculum'
                 ? 'bg-zinc-900 text-white'
                 : 'text-zinc-500 hover:text-zinc-800'
             )}
           >
             <LayoutGridIcon className="h-3.5 w-3.5" />
-            전체 보기
+            교과자료
           </button>
           <button
             type="button"
-            onClick={() => setViewMode('by-teacher')}
+            onClick={() => setViewMode('additional')}
             className={cn(
               'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1 text-[13px] font-medium transition-colors',
-              viewMode === 'by-teacher'
+              viewMode === 'additional'
                 ? 'bg-zinc-900 text-white'
                 : 'text-zinc-500 hover:text-zinc-800'
             )}
           >
             <UsersIcon className="h-3.5 w-3.5" />
-            선생님별
+            추가자료
           </button>
         </div>
 
@@ -492,7 +586,7 @@ export default function MaterialsPage() {
             <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-400" />
             <Input
               type="search"
-              placeholder="제목으로 검색"
+              placeholder="제목·과목으로 검색"
               className="h-9 pl-8"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -500,14 +594,14 @@ export default function MaterialsPage() {
           </div>
         </div>
 
-        {viewMode === 'by-teacher' && (
+        {viewMode === 'curriculum' && (
           <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1">
             <SubjectChip
               label="전체"
               active={subjectFilter === 'all'}
               onClick={() => setSubjectFilter('all')}
             />
-            {uniqueSubjects.map((s) => (
+            {SUBJECT_OPTIONS.map((s) => (
               <SubjectChip
                 key={s}
                 label={s}
@@ -524,116 +618,56 @@ export default function MaterialsPage() {
           <Loader2Icon className="mr-2 h-5 w-5 animate-spin" />
           <span className="text-sm">불러오는 중…</span>
         </div>
-      ) : viewMode === 'all' ? (
-        materials.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <p className="text-sm text-zinc-500">등록된 자료가 없습니다</p>
-            <p className="mt-1 text-xs text-zinc-400">
-              우측 하단 버튼으로 자료를 등록해보세요
-            </p>
-          </div>
+      ) : viewMode === 'curriculum' ? (
+        subjectFilter === 'all' ? (
+          gradeFilteredCurriculum.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <p className="text-sm text-zinc-500">등록된 교과자료가 없어요</p>
+              <p className="mt-1 text-xs text-zinc-400">
+                우측 하단 버튼으로 자료를 등록해보세요
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {gradeFilteredCurriculum.map((m) => (
+                <MaterialCard
+                  key={m.id}
+                  material={m}
+                  currentUserId={user?.id}
+                  canDelete={canDeleteMaterial(m)}
+                  onDelete={handleDelete}
+                  canEdit={canEditMaterial(m)}
+                  onEdit={handleEdit}
+                />
+              ))}
+            </div>
+          )
         ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            {materials.map((m) => (
-              <MaterialCard
-                key={m.id}
-                material={m}
-                currentUserId={user?.id}
-                canDelete={canDeleteMaterial(m)}
-                onDelete={handleDelete}
-                canEdit={canEditMaterial(m)}
-                onEdit={handleEdit}
-              />
-            ))}
-          </div>
+          <CurriculumBySubject
+            subject={subjectFilter}
+            data={curriculumBySubject}
+            gradeFilter={gradeFilter}
+            currentUserId={user?.id}
+            canDelete={canDeleteMaterial}
+            onDelete={handleDelete}
+            canEdit={canEditMaterial}
+            onEdit={handleEdit}
+          />
         )
       ) : (
-        <div className="space-y-5">
-          {visibleSubjects.map((subj) => {
-            const list = teachersBySubject.get(subj) ?? []
-            const applicable = list.filter((t) => {
-              const items = materialsByTeacher.get(t.id) ?? []
-              if (items.length === 0) return false
-              if (gradeFilter === 'all') return true
-              return items.some((m) => m.grade === Number(gradeFilter))
-            })
-            if (applicable.length === 0) return null
-            return (
-              <section key={subj} className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <h2 className="text-sm font-semibold text-zinc-800">
-                    {subj}
-                  </h2>
-                  <span className="text-xs text-zinc-400">
-                    {applicable.length}명
-                  </span>
-                </div>
-                {applicable.map((t) => {
-                  const list = (materialsByTeacher.get(t.id) ?? []).filter(
-                    (m) =>
-                      gradeFilter === 'all' ||
-                      m.grade === Number(gradeFilter)
-                  )
-                  if (list.length === 0) return null
-                  return (
-                    <TeacherSection
-                      key={t.id}
-                      teacher={t}
-                      materials={list}
-                      currentUserId={user?.id}
-                      canDelete={canDeleteMaterial}
-                      onDelete={handleDelete}
-                      canEdit={canEditMaterial}
-                      onEdit={handleEdit}
-                    />
-                  )
-                })}
-              </section>
-            )
-          })}
-
-          {commonMaterials.length > 0 && subjectFilter === 'all' && (
-            <section className="space-y-3">
-              <div className="flex items-center gap-2">
-                <h2 className="text-sm font-semibold text-zinc-800">공통</h2>
-                <span className="text-xs text-zinc-400">
-                  교과서 · 공통자료
-                </span>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {commonMaterials
-                  .filter(
-                    (m) =>
-                      gradeFilter === 'all' ||
-                      m.grade === Number(gradeFilter)
-                  )
-                  .map((m) => (
-                    <MaterialCard
-                      key={m.id}
-                      material={m}
-                      currentUserId={user?.id}
-                      canDelete={canDeleteMaterial(m)}
-                      onDelete={handleDelete}
-                      canEdit={canEditMaterial(m)}
-                      onEdit={handleEdit}
-                    />
-                  ))}
-              </div>
-            </section>
+        <AdditionalTab
+          links={linkMaterials.filter(
+            (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
           )}
-
-          {visibleSubjects.every((s) => {
-            const list = teachersBySubject.get(s) ?? []
-            return list.every(
-              (t) => (materialsByTeacher.get(t.id) ?? []).length === 0
-            )
-          }) &&
-            commonMaterials.length === 0 && (
-              <div className="flex flex-col items-center justify-center py-16 text-center">
-                <p className="text-sm text-zinc-500">등록된 자료가 없어요</p>
-              </div>
-            )}
-        </div>
+          files={supplementaryFiles.filter(
+            (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
+          )}
+          currentUserId={user?.id}
+          canDelete={canDeleteMaterial}
+          onDelete={handleDelete}
+          canEdit={canEditMaterial}
+          onEdit={handleEdit}
+        />
       )}
 
       <Button
@@ -672,6 +706,10 @@ export default function MaterialsPage() {
         setFormCategory={setFormCategory}
         formFile={formFile}
         setFormFile={setFormFile}
+        uploadMode={uploadMode}
+        setUploadMode={setUploadMode}
+        formLinkUrl={formLinkUrl}
+        setFormLinkUrl={setFormLinkUrl}
       />
 
       <MaterialEditDialog
@@ -756,20 +794,203 @@ function TeacherSection({
         </div>
         <span className="text-xs text-zinc-400">{materials.length}개</span>
       </div>
-      <div className="grid grid-cols-1 gap-2">
+      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">
         {materials.map((m) => (
-          <MaterialCard
-            key={m.id}
-            material={m}
-            currentUserId={currentUserId}
-            canDelete={canDelete(m)}
-            onDelete={onDelete}
-            canEdit={canEdit(m)}
-            onEdit={onEdit}
-            compact
-          />
+          <div key={m.id} className="w-64 shrink-0">
+            <MaterialCard
+              material={m}
+              currentUserId={currentUserId}
+              canDelete={canDelete(m)}
+              onDelete={onDelete}
+              canEdit={canEdit(m)}
+              onEdit={onEdit}
+              compact
+            />
+          </div>
         ))}
       </div>
+    </div>
+  )
+}
+
+function CurriculumBySubject({
+  subject,
+  data,
+  gradeFilter,
+  currentUserId,
+  canDelete,
+  onDelete,
+  canEdit,
+  onEdit,
+}: {
+  subject: string
+  data: {
+    commonList: MaterialWithTeacher[]
+    teachers: Teacher[]
+    byTeacher: Map<string, MaterialWithTeacher[]>
+  } | null
+  gradeFilter: 'all' | '1' | '2' | '3'
+  currentUserId?: string
+  canDelete: (m: MaterialWithTeacher) => boolean
+  onDelete: (m: MaterialWithTeacher) => void
+  canEdit: (m: MaterialWithTeacher) => boolean
+  onEdit: (m: MaterialWithTeacher) => void
+}) {
+  if (!data) return null
+  const commonFiltered = data.commonList.filter(
+    (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
+  )
+  const teachersWithMaterials = data.teachers
+    .map((t) => {
+      const list = (data.byTeacher.get(t.id) ?? []).filter(
+        (m) => gradeFilter === 'all' || m.grade === Number(gradeFilter)
+      )
+      return { teacher: t, list }
+    })
+    .filter((x) => x.list.length > 0)
+
+  if (commonFiltered.length === 0 && teachersWithMaterials.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <p className="text-sm text-zinc-500">
+          {subject} 자료가 아직 없어요
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      {commonFiltered.length > 0 && (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-zinc-800">
+              교과서 · 공통자료
+            </h2>
+            <span className="text-xs text-zinc-400">
+              {commonFiltered.length}개
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {commonFiltered.map((m) => (
+              <MaterialCard
+                key={m.id}
+                material={m}
+                currentUserId={currentUserId}
+                canDelete={canDelete(m)}
+                onDelete={onDelete}
+                canEdit={canEdit(m)}
+                onEdit={onEdit}
+                compact
+              />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {teachersWithMaterials.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-zinc-800">선생님별</h2>
+            <span className="text-xs text-zinc-400">
+              {teachersWithMaterials.length}명
+            </span>
+          </div>
+          <div className="space-y-3">
+            {teachersWithMaterials.map(({ teacher, list }) => (
+              <TeacherSection
+                key={teacher.id}
+                teacher={teacher}
+                materials={list}
+                currentUserId={currentUserId}
+                canDelete={canDelete}
+                onDelete={onDelete}
+                canEdit={canEdit}
+                onEdit={onEdit}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  )
+}
+
+function AdditionalTab({
+  links,
+  files,
+  currentUserId,
+  canDelete,
+  onDelete,
+  canEdit,
+  onEdit,
+}: {
+  links: MaterialWithTeacher[]
+  files: MaterialWithTeacher[]
+  currentUserId?: string
+  canDelete: (m: MaterialWithTeacher) => boolean
+  onDelete: (m: MaterialWithTeacher) => void
+  canEdit: (m: MaterialWithTeacher) => boolean
+  onEdit: (m: MaterialWithTeacher) => void
+}) {
+  if (links.length === 0 && files.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <p className="text-sm text-zinc-500">등록된 추가자료가 없어요</p>
+        <p className="mt-1 text-xs text-zinc-400">
+          링크나 참고 파일을 등록해보세요
+        </p>
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-5">
+      {links.length > 0 && (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-zinc-800">
+              🔗 링크 자료
+            </h2>
+            <span className="text-xs text-zinc-400">{links.length}개</span>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {links.map((m) => (
+              <MaterialCard
+                key={m.id}
+                material={m}
+                currentUserId={currentUserId}
+                canDelete={canDelete(m)}
+                onDelete={onDelete}
+                canEdit={canEdit(m)}
+                onEdit={onEdit}
+              />
+            ))}
+          </div>
+        </section>
+      )}
+      {files.length > 0 && (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-zinc-800">
+              📎 추가 파일
+            </h2>
+            <span className="text-xs text-zinc-400">{files.length}개</span>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {files.map((m) => (
+              <MaterialCard
+                key={m.id}
+                material={m}
+                currentUserId={currentUserId}
+                canDelete={canDelete(m)}
+                onDelete={onDelete}
+                canEdit={canEdit(m)}
+                onEdit={onEdit}
+              />
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   )
 }
@@ -799,6 +1020,10 @@ type UploadDialogProps = {
   setFormCategory: (v: string) => void
   formFile: File | null
   setFormFile: (v: File | null) => void
+  uploadMode: UploadMode
+  setUploadMode: (v: UploadMode) => void
+  formLinkUrl: string
+  setFormLinkUrl: (v: string) => void
 }
 
 function UploadDialog(props: UploadDialogProps) {
@@ -825,6 +1050,10 @@ function UploadDialog(props: UploadDialogProps) {
     setFormCategory,
     formFile,
     setFormFile,
+    uploadMode,
+    setUploadMode,
+    formLinkUrl,
+    setFormLinkUrl,
   } = props
 
   const managedGrades =
@@ -833,6 +1062,10 @@ function UploadDialog(props: UploadDialogProps) {
         ? myTeacher.managed_grades
         : [1, 2, 3]
       : [1, 2, 3]
+
+  const isSupplementary = formCategory === SUPPLEMENTARY_CATEGORY
+  const isTextbook = formCategory === '교과서'
+  const isLinkMode = isSupplementary && uploadMode === 'link'
 
   const description =
     role === 'admin'
@@ -944,7 +1177,7 @@ function UploadDialog(props: UploadDialogProps) {
             </div>
           </div>
 
-          {role !== 'teacher' && (
+          {role !== 'teacher' && !isTextbook && (
             <div className="space-y-1.5">
               <Label htmlFor="material-teacher">선생님 (선택)</Label>
               <Select
@@ -957,7 +1190,7 @@ function UploadDialog(props: UploadDialogProps) {
                   <SelectValue placeholder="선생님 선택" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">공통 · 교과서</SelectItem>
+                  <SelectItem value="none">공통 자료</SelectItem>
                   {teachers.length === 0 ? (
                     <div className="px-2 py-1.5 text-xs text-zinc-400">
                       등록된 선생님이 없습니다
@@ -973,25 +1206,79 @@ function UploadDialog(props: UploadDialogProps) {
               </Select>
             </div>
           )}
+          {isTextbook && (
+            <div className="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+              교과서는 선생님 무관 공통 자료로 등록돼요.
+            </div>
+          )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="material-file">
-              파일 (PDF · HWP · 이미지, 50MB 이하)
-            </Label>
-            <Input
-              id="material-file"
-              type="file"
-              accept=".pdf,.hwp,.hwpx,.jpg,.jpeg,.png"
-              onChange={(e) => setFormFile(e.target.files?.[0] ?? null)}
-              required
-              className="h-auto py-1.5"
-            />
-            {formFile && (
+          {isSupplementary && (
+            <div className="space-y-1.5">
+              <Label>업로드 형식</Label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setUploadMode('file')}
+                  className={cn(
+                    'rounded-md border py-2 text-xs font-medium transition-colors',
+                    uploadMode === 'file'
+                      ? 'border-zinc-900 bg-zinc-900 text-white'
+                      : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
+                  )}
+                >
+                  파일
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUploadMode('link')}
+                  className={cn(
+                    'rounded-md border py-2 text-xs font-medium transition-colors',
+                    uploadMode === 'link'
+                      ? 'border-zinc-900 bg-zinc-900 text-white'
+                      : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
+                  )}
+                >
+                  링크
+                </button>
+              </div>
+            </div>
+          )}
+
+          {isLinkMode ? (
+            <div className="space-y-1.5">
+              <Label htmlFor="material-link">링크 주소</Label>
+              <Input
+                id="material-link"
+                type="url"
+                placeholder="https://…"
+                value={formLinkUrl}
+                onChange={(e) => setFormLinkUrl(e.target.value)}
+                required
+              />
               <p className="text-xs text-zinc-500">
-                {formFile.name} · {(formFile.size / 1024 / 1024).toFixed(2)}MB
+                외부 사이트/구글드라이브/영상 등 어떤 URL이든 등록할 수 있어요.
               </p>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-1.5">
+              <Label htmlFor="material-file">
+                파일 (PDF · HWP · 이미지, 50MB 이하)
+              </Label>
+              <Input
+                id="material-file"
+                type="file"
+                accept=".pdf,.hwp,.hwpx,.jpg,.jpeg,.png"
+                onChange={(e) => setFormFile(e.target.files?.[0] ?? null)}
+                required
+                className="h-auto py-1.5"
+              />
+              {formFile && (
+                <p className="text-xs text-zinc-500">
+                  {formFile.name} · {(formFile.size / 1024 / 1024).toFixed(2)}MB
+                </p>
+              )}
+            </div>
+          )}
 
           <DialogFooter>
             <Button

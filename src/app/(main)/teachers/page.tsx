@@ -20,6 +20,7 @@ import type {
   Teacher,
   TeacherSchedule,
   TeacherStatus,
+  WeekType,
 } from '@/types/database'
 import MaterialCard from '@/components/MaterialCard'
 import { cn, getErrorMessage } from '@/lib/utils'
@@ -99,7 +100,18 @@ const PURPOSE_OPTIONS: { value: MessagePurpose; label: string }[] = [
 ]
 
 const DAY_LABELS = ['월', '화', '수', '목', '금'] as const
-const PERIODS = [1, 2, 3, 4, 5, 6, 7] as const
+const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const
+
+// 학기 시작일 (월요일). 이 날 포함 주 = 1주차(홀).
+const SEMESTER_START = new Date(2026, 2, 2) // 2026-03-02 (월)
+
+function currentWeekType(now: Date = new Date()): Exclude<WeekType, 'all'> {
+  const startMs = SEMESTER_START.getTime()
+  const nowMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
+  const weeks = Math.floor((nowMs - startMs) / (7 * 24 * 3600 * 1000))
+  // week 0 = 홀, week 1 = 짝, ...
+  return weeks % 2 === 0 ? 'odd' : 'even'
+}
 
 function initial(name: string): string {
   return name.trim().slice(0, 1) || '?'
@@ -160,11 +172,31 @@ function ScheduleGrid({
   schedules: TeacherSchedule[]
   loading: boolean
 }) {
+  const thisWeek = useMemo(() => currentWeekType(), [])
+
+  // 오늘 주차와 일치하지 않는 격주 수업은 제외.
+  // (day, period) 셀에는 이번 주에 열리는 수업 중 하나만 선택.
   const map = useMemo(() => {
-    const m = new Map<string, TeacherSchedule>()
-    for (const s of schedules) m.set(`${s.day_of_week}-${s.period}`, s)
-    return m
-  }, [schedules])
+    const byCell = new Map<string, TeacherSchedule[]>()
+    for (const s of schedules) {
+      const key = `${s.day_of_week}-${s.period}`
+      const arr = byCell.get(key) ?? []
+      arr.push(s)
+      byCell.set(key, arr)
+    }
+    const filtered = new Map<string, TeacherSchedule>()
+    for (const [key, list] of byCell) {
+      // 이번 주에 열리는 것: 'all' or 오늘 주차와 같은 week_type
+      const applicable = list.filter(
+        (s) => s.week_type === 'all' || s.week_type === thisWeek
+      )
+      // 'all' 이 있으면 우선, 아니면 첫번째
+      const chosen =
+        applicable.find((s) => s.week_type === 'all') ?? applicable[0]
+      if (chosen) filtered.set(key, chosen)
+    }
+    return filtered
+  }, [schedules, thisWeek])
 
   if (loading) {
     return (
@@ -184,48 +216,71 @@ function ScheduleGrid({
   }
 
   return (
-    <div className="grid grid-cols-6 gap-1 text-[10px]">
-      <div />
-      {DAY_LABELS.map((d) => (
-        <div
-          key={d}
-          className="py-1 text-center text-xs font-semibold text-zinc-700"
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-end gap-1.5 text-[10px] text-zinc-500">
+        <span
+          className={cn(
+            'inline-flex h-4 items-center rounded-sm px-1 font-semibold',
+            thisWeek === 'odd'
+              ? 'bg-indigo-500 text-white'
+              : 'bg-indigo-400 text-white'
+          )}
         >
-          {d}
-        </div>
-      ))}
-      {PERIODS.map((p) => (
-        <Fragment key={p}>
-          <div className="flex items-center justify-center py-1 text-xs font-medium text-zinc-500">
-            {p}교시
+          {thisWeek === 'odd' ? '홀' : '짝'}수주
+        </span>
+        <span>기준 표시</span>
+      </div>
+      <div className="grid grid-cols-6 gap-1 text-[10px]">
+        <div />
+        {DAY_LABELS.map((d) => (
+          <div
+            key={d}
+            className="py-1 text-center text-xs font-semibold text-zinc-700"
+          >
+            {d}
           </div>
-          {DAY_LABELS.map((_, dayIdx) => {
-            const s = map.get(`${dayIdx + 1}-${p}`)
-            return (
-              <div
-                key={dayIdx}
-                className={cn(
-                  'flex min-h-11 flex-col items-center justify-center rounded-md p-1 text-center',
-                  s
-                    ? 'bg-indigo-50 text-indigo-900 border border-indigo-100'
-                    : 'bg-zinc-50 border border-zinc-100'
-                )}
-              >
-                {s && (
-                  <>
-                    <span className="text-[11px] font-semibold leading-tight">
-                      {s.classroom}
-                    </span>
-                    <span className="text-[9px] leading-tight text-indigo-700/70">
-                      {s.grade}학년 {s.class_number}반
-                    </span>
-                  </>
-                )}
-              </div>
-            )
-          })}
-        </Fragment>
-      ))}
+        ))}
+        {PERIODS.map((p) => (
+          <Fragment key={p}>
+            <div className="flex items-center justify-center py-1 text-xs font-medium text-zinc-500">
+              {p}교시
+            </div>
+            {DAY_LABELS.map((_, dayIdx) => {
+              const s = map.get(`${dayIdx + 1}-${p}`)
+              const primary = s?.group_name?.trim() || s?.classroom
+              return (
+                <div
+                  key={dayIdx}
+                  className={cn(
+                    'relative flex min-h-11 flex-col items-center justify-center rounded-md p-1 text-center',
+                    s
+                      ? 'border border-indigo-100 bg-indigo-50 text-indigo-900'
+                      : 'border border-zinc-100 bg-zinc-50'
+                  )}
+                >
+                  {s && (
+                    <>
+                      {s.week_type !== 'all' && (
+                        <span className="absolute right-0.5 top-0.5 rounded-sm bg-indigo-500 px-0.5 text-[8px] font-bold text-white">
+                          {s.week_type === 'odd' ? '홀' : '짝'}
+                        </span>
+                      )}
+                      <span className="line-clamp-1 text-[11px] font-semibold leading-tight">
+                        {primary}
+                      </span>
+                      {s.group_name && s.classroom !== s.group_name && (
+                        <span className="line-clamp-1 text-[9px] leading-tight text-indigo-700/70">
+                          {s.classroom}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </Fragment>
+        ))}
+      </div>
     </div>
   )
 }

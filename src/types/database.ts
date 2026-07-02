@@ -49,6 +49,8 @@ export type Teacher = {
   updated_at: string
 }
 
+export type WeekType = 'all' | 'odd' | 'even'
+
 export type TeacherSchedule = {
   id: string
   teacher_id: string
@@ -57,6 +59,8 @@ export type TeacherSchedule = {
   classroom: string
   grade: number
   class_number: number
+  group_name: string | null
+  week_type: WeekType
 }
 
 export type EventType = 'assignment' | 'exam' | 'personal'
@@ -84,7 +88,7 @@ export type Event = {
   created_at: string
 }
 
-export type MaterialFileType = 'pdf' | 'hwp' | 'image' | 'other'
+export type MaterialFileType = 'pdf' | 'hwp' | 'image' | 'other' | 'link'
 export type MaterialStatus = 'pending' | 'approved' | 'rejected'
 
 export type Material = {
@@ -104,6 +108,8 @@ export type Material = {
   approved_by: string | null
   approved_at: string | null
   created_at: string
+  link_url: string | null
+  is_supplementary: boolean
 }
 
 export type MaterialWithTeacher = Material & {

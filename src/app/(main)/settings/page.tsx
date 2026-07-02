@@ -27,6 +27,7 @@ import type {
   TeacherSchedule,
   TeacherStatus,
   User,
+  WeekType,
 } from '@/types/database'
 import { cn, getErrorMessage } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -38,6 +39,14 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import {
@@ -64,7 +73,13 @@ const TEACHER_SUBJECTS = [
 
 const GRADES = [1, 2, 3] as const
 const DAY_LABELS = ['월', '화', '수', '목', '금'] as const
-const PERIODS = [1, 2, 3, 4, 5, 6, 7] as const
+const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const
+
+const WEEK_TYPE_OPTIONS: { value: WeekType; label: string; short: string }[] = [
+  { value: 'all', label: '매주', short: '' },
+  { value: 'odd', label: '홀수주', short: '홀' },
+  { value: 'even', label: '짝수주', short: '짝' },
+]
 
 const STATUS_OPTIONS: {
   value: TeacherStatus
@@ -1219,126 +1234,22 @@ function TeacherScheduleCard({
   schedules: TeacherSchedule[]
   onUpdated: Refresh
 }) {
-  const [adding, setAdding] = useState(false)
-  const [busyIds, setBusyIds] = useState<Record<string, boolean>>({})
+  const [editing, setEditing] = useState<{
+    day: number
+    period: number
+  } | null>(null)
 
-  // form state
-  const [day, setDay] = useState<string>('')
-  const [period, setPeriod] = useState<string>('')
-  const [classroom, setClassroom] = useState('')
-  const [grade, setGrade] = useState<string>('')
-  const [classNumber, setClassNumber] = useState<string>('')
-  const [saving, setSaving] = useState(false)
-
-  const sorted = useMemo(
-    () =>
-      [...schedules].sort((a, b) => {
-        if (a.day_of_week !== b.day_of_week) return a.day_of_week - b.day_of_week
-        return a.period - b.period
-      }),
-    [schedules]
-  )
-
-  const resetForm = () => {
-    setDay('')
-    setPeriod('')
-    setClassroom('')
-    setGrade('')
-    setClassNumber('')
-  }
-
-  const startAdd = () => {
-    resetForm()
-    setAdding(true)
-  }
-
-  const cancelAdd = () => {
-    resetForm()
-    setAdding(false)
-  }
-
-  const addSchedule = async () => {
-    if (!day || !period || !classroom.trim() || !grade || !classNumber) return
-    setSaving(true)
-    try {
-      const supabase = createClient()
-      const payload = {
-        teacher_id: teacherId,
-        day_of_week: Number(day),
-        period: Number(period),
-        classroom: classroom.trim(),
-        grade: Number(grade),
-        class_number: Number(classNumber),
-      }
-
-      // 같은 (teacher_id, day_of_week, period) 조합이 이미 있으면 UPDATE, 아니면 INSERT
-      const { data: existing, error: findErr } = await supabase
-        .from('teacher_schedules')
-        .select('id')
-        .eq('teacher_id', payload.teacher_id)
-        .eq('day_of_week', payload.day_of_week)
-        .eq('period', payload.period)
-        .maybeSingle<{ id: string }>()
-      if (findErr) throw findErr
-
-      if (existing) {
-        if (
-          !confirm(
-            `${DAY_LABELS[payload.day_of_week - 1]}요일 ${payload.period}교시에 이미 시간표가 있어요. 덮어쓸까요?`
-          )
-        ) {
-          setSaving(false)
-          return
-        }
-        const { error: updErr } = await supabase
-          .from('teacher_schedules')
-          .update({
-            classroom: payload.classroom,
-            grade: payload.grade,
-            class_number: payload.class_number,
-          })
-          .eq('id', existing.id)
-        if (updErr) throw updErr
-      } else {
-        const { error: insErr } = await supabase
-          .from('teacher_schedules')
-          .insert(payload)
-        if (insErr) throw insErr
-      }
-
-      await onUpdated()
-      cancelAdd()
-    } catch (err) {
-      console.error('schedule save failed:', err)
-      alert(`추가 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setSaving(false)
+  // (day-period-week_type) 단위로 조회 가능하도록 인덱싱
+  const schedulesByCell = useMemo(() => {
+    const map = new Map<string, TeacherSchedule[]>()
+    for (const s of schedules) {
+      const key = `${s.day_of_week}-${s.period}`
+      const arr = map.get(key) ?? []
+      arr.push(s)
+      map.set(key, arr)
     }
-  }
-
-  const removeSchedule = async (s: TeacherSchedule) => {
-    if (!confirm(`${DAY_LABELS[s.day_of_week - 1]}요일 ${s.period}교시를 삭제할까요?`))
-      return
-    setBusyIds((prev) => ({ ...prev, [s.id]: true }))
-    try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from('teacher_schedules')
-        .delete()
-        .eq('id', s.id)
-      if (error) throw error
-      await onUpdated()
-    } catch (err) {
-      console.error('schedule delete failed:', err)
-      alert(`삭제 실패: ${getErrorMessage(err)}`)
-    } finally {
-      setBusyIds((prev) => {
-        const next = { ...prev }
-        delete next[s.id]
-        return next
-      })
-    }
-  }
+    return map
+  }, [schedules])
 
   return (
     <Card>
@@ -1347,177 +1258,515 @@ function TeacherScheduleCard({
           내 시간표
         </CardTitle>
         <CardDescription>
-          담당 수업 시간을 추가해두면 학생들이 지금 어디에 계신지 확인할 수 있어요.
+          빈 셀을 눌러 수업을 추가하세요. 격주(홀/짝)로 다른 수업이 있으면 하나의
+          셀에 두 개까지 등록할 수 있어요.
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-3">
-        {sorted.length === 0 && !adding ? (
-          <div className="rounded-lg border border-dashed border-zinc-200 bg-white py-8 text-center text-sm text-zinc-500">
-            아직 시간표가 없어요.
-          </div>
-        ) : (
-          <ul className="divide-y divide-zinc-100 overflow-hidden rounded-lg border border-zinc-200 bg-white">
-            {sorted.map((s) => {
-              const busy = !!busyIds[s.id]
-              return (
-                <li
-                  key={s.id}
-                  className="flex items-center gap-2 px-3 py-2.5 text-sm"
+      <CardContent>
+        <div className="overflow-x-auto">
+          <div className="min-w-[520px]">
+            {/* Header row */}
+            <div className="grid grid-cols-6 gap-1">
+              <div className="h-8" />
+              {DAY_LABELS.map((d) => (
+                <div
+                  key={d}
+                  className="flex h-8 items-center justify-center text-xs font-semibold text-zinc-600"
                 >
-                  <span className="inline-flex h-6 w-8 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 text-[11px] font-semibold text-zinc-700">
-                    {DAY_LABELS[s.day_of_week - 1]}
+                  {d}
+                </div>
+              ))}
+            </div>
+            {/* Body rows */}
+            {PERIODS.map((p) => (
+              <div key={p} className="mt-1 grid grid-cols-6 gap-1">
+                <div className="flex h-16 items-center justify-center text-[11px] font-medium text-zinc-500">
+                  {p}교시
+                </div>
+                {DAY_LABELS.map((_, dayIdx) => {
+                  const day = dayIdx + 1
+                  const cellItems =
+                    schedulesByCell.get(`${day}-${p}`) ?? []
+                  return (
+                    <ScheduleCell
+                      key={day}
+                      items={cellItems}
+                      onOpen={() => setEditing({ day, period: p })}
+                    />
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+
+      {editing && (
+        <ScheduleCellDialog
+          teacherId={teacherId}
+          day={editing.day}
+          period={editing.period}
+          existing={schedulesByCell.get(`${editing.day}-${editing.period}`) ?? []}
+          open={!!editing}
+          onOpenChange={(v) => {
+            if (!v) setEditing(null)
+          }}
+          onSaved={async () => {
+            await onUpdated()
+          }}
+        />
+      )}
+    </Card>
+  )
+}
+
+function ScheduleCell({
+  items,
+  onOpen,
+}: {
+  items: TeacherSchedule[]
+  onOpen: () => void
+}) {
+  if (items.length === 0) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex h-16 flex-col items-center justify-center rounded-md border border-dashed border-zinc-200 bg-zinc-50 text-zinc-400 transition-colors hover:border-zinc-300 hover:bg-zinc-100 hover:text-zinc-500"
+        aria-label="시간표 추가"
+      >
+        <PlusIcon className="h-3.5 w-3.5" />
+      </button>
+    )
+  }
+
+  // 홀/짝이 각각 있는 경우 상하로 분할해서 표시
+  const odd = items.find((i) => i.week_type === 'odd')
+  const even = items.find((i) => i.week_type === 'even')
+  const all = items.find((i) => i.week_type === 'all')
+
+  if (all) {
+    return (
+      <button
+        type="button"
+        onClick={onOpen}
+        className="flex h-16 flex-col items-center justify-center gap-0.5 rounded-md border border-indigo-200 bg-indigo-50 px-1 text-center text-indigo-900 transition-colors hover:border-indigo-300 hover:bg-indigo-100"
+      >
+        <span className="line-clamp-1 text-[11px] font-semibold leading-tight">
+          {all.group_name || all.classroom}
+        </span>
+        <span className="line-clamp-1 text-[9px] leading-tight text-indigo-700/80">
+          {all.classroom}
+        </span>
+      </button>
+    )
+  }
+
+  // 격주 표시 (홀 위/짝 아래)
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex h-16 flex-col overflow-hidden rounded-md border border-indigo-200 bg-white text-indigo-900 transition-colors hover:border-indigo-300"
+    >
+      <div
+        className={cn(
+          'flex flex-1 items-center gap-0.5 px-1 text-center',
+          odd
+            ? 'bg-indigo-50'
+            : 'bg-zinc-50 text-zinc-400 border-b border-dashed border-zinc-200'
+        )}
+      >
+        <span className="shrink-0 rounded-sm bg-indigo-500 px-0.5 text-[8px] font-bold text-white">
+          홀
+        </span>
+        <span className="line-clamp-1 flex-1 text-left text-[10px] font-medium leading-tight">
+          {odd ? odd.group_name || odd.classroom : '비어 있음'}
+        </span>
+      </div>
+      <div
+        className={cn(
+          'flex flex-1 items-center gap-0.5 px-1 text-center',
+          even ? 'bg-indigo-50/70' : 'bg-zinc-50 text-zinc-400'
+        )}
+      >
+        <span className="shrink-0 rounded-sm bg-indigo-400 px-0.5 text-[8px] font-bold text-white">
+          짝
+        </span>
+        <span className="line-clamp-1 flex-1 text-left text-[10px] font-medium leading-tight">
+          {even ? even.group_name || even.classroom : '비어 있음'}
+        </span>
+      </div>
+    </button>
+  )
+}
+
+function ScheduleCellDialog({
+  teacherId,
+  day,
+  period,
+  existing,
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  teacherId: string
+  day: number
+  period: number
+  existing: TeacherSchedule[]
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onSaved: () => Promise<void> | void
+}) {
+  const editingRecord = existing.length === 1 ? existing[0] : null
+
+  // 새로 추가할 때는 빈 값, 편집 시엔 기존 값
+  const [groupName, setGroupName] = useState('')
+  const [classroom, setClassroom] = useState('')
+  const [grade, setGrade] = useState<string>('')
+  const [classNumber, setClassNumber] = useState<string>('')
+  const [weekType, setWeekType] = useState<WeekType>('all')
+  const [saving, setSaving] = useState(false)
+  const [busyId, setBusyId] = useState<string | null>(null)
+
+  // 다중 등록(홀/짝) 케이스: 편집 대상 선택
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!open) return
+    if (editingRecord) {
+      setSelectedId(editingRecord.id)
+      hydrateFrom(editingRecord)
+    } else if (existing.length > 1) {
+      // 이미 홀/짝 모두 있음: 첫 항목을 편집 상태로
+      setSelectedId(existing[0].id)
+      hydrateFrom(existing[0])
+    } else {
+      setSelectedId(null)
+      setGroupName('')
+      setClassroom('')
+      setGrade('')
+      setClassNumber('')
+      // 기본 weekType: 아직 없는 것 선호. 아무것도 없으면 all
+      const usedTypes = new Set(existing.map((e) => e.week_type))
+      if (usedTypes.has('all')) setWeekType('odd')
+      else if (usedTypes.has('odd') && !usedTypes.has('even')) setWeekType('even')
+      else if (usedTypes.has('even') && !usedTypes.has('odd')) setWeekType('odd')
+      else setWeekType('all')
+    }
+  }, [open, existing, editingRecord])
+
+  const hydrateFrom = (r: TeacherSchedule) => {
+    setGroupName(r.group_name ?? '')
+    setClassroom(r.classroom)
+    setGrade(String(r.grade))
+    setClassNumber(String(r.class_number))
+    setWeekType(r.week_type)
+  }
+
+  const selectExistingForEdit = (id: string) => {
+    const r = existing.find((e) => e.id === id)
+    if (!r) return
+    setSelectedId(id)
+    hydrateFrom(r)
+  }
+
+  const startNew = () => {
+    setSelectedId(null)
+    setGroupName('')
+    setClassroom('')
+    setGrade('')
+    setClassNumber('')
+    const usedTypes = new Set(
+      existing
+        .filter((e) => e.id !== selectedId)
+        .map((e) => e.week_type)
+    )
+    if (usedTypes.has('all')) setWeekType('odd')
+    else if (usedTypes.has('odd') && !usedTypes.has('even')) setWeekType('even')
+    else if (usedTypes.has('even') && !usedTypes.has('odd')) setWeekType('odd')
+    else setWeekType('all')
+  }
+
+  const canSave =
+    !saving &&
+    groupName.trim().length > 0 &&
+    classroom.trim().length > 0 &&
+    grade !== '' &&
+    classNumber !== ''
+
+  const save = async () => {
+    if (!canSave) return
+    setSaving(true)
+    try {
+      const supabase = createClient()
+
+      // 같은 (day, period, week_type=all) 이거나
+      // week_type이 'all' + 기존에 홀/짝이 있으면 충돌 안내
+      if (!selectedId) {
+        const usedTypes = new Set(existing.map((e) => e.week_type))
+        if (weekType === 'all' && (usedTypes.has('odd') || usedTypes.has('even'))) {
+          if (
+            !confirm(
+              '이 시간에 격주 수업이 이미 있어요. "매주"로 저장하면 기존 격주 항목이 유지된 채로 추가돼요. 계속할까요?'
+            )
+          ) {
+            setSaving(false)
+            return
+          }
+        }
+        if (weekType !== 'all' && usedTypes.has(weekType)) {
+          alert(
+            `이 시간에 이미 ${weekType === 'odd' ? '홀수주' : '짝수주'} 수업이 있어요. 좌측 목록에서 선택해 수정하세요.`
+          )
+          setSaving(false)
+          return
+        }
+      }
+
+      const payload = {
+        teacher_id: teacherId,
+        day_of_week: day,
+        period,
+        classroom: classroom.trim(),
+        grade: Number(grade),
+        class_number: Number(classNumber),
+        group_name: groupName.trim() || null,
+        week_type: weekType,
+      }
+
+      if (selectedId) {
+        const { error } = await supabase
+          .from('teacher_schedules')
+          .update(payload)
+          .eq('id', selectedId)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('teacher_schedules')
+          .insert(payload)
+        if (error) throw error
+      }
+
+      await onSaved()
+      onOpenChange(false)
+    } catch (err) {
+      console.error('schedule save failed:', err)
+      alert(`저장 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const remove = async (id: string) => {
+    if (!confirm('이 시간표를 삭제할까요?')) return
+    setBusyId(id)
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('teacher_schedules')
+        .delete()
+        .eq('id', id)
+      if (error) throw error
+      await onSaved()
+      // 남은 항목이 없으면 닫고, 있으면 새 항목 편집 상태로
+      const remain = existing.filter((e) => e.id !== id)
+      if (remain.length === 0) {
+        onOpenChange(false)
+      } else {
+        startNew()
+      }
+    } catch (err) {
+      console.error('schedule delete failed:', err)
+      alert(`삭제 실패: ${getErrorMessage(err)}`)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>
+            {DAY_LABELS[day - 1]}요일 {period}교시
+          </DialogTitle>
+          <DialogDescription>
+            수업/반/팀 이름, 교실, 주기를 입력하세요. 격주면 홀/짝 각각 등록할 수
+            있어요.
+          </DialogDescription>
+        </DialogHeader>
+
+        {existing.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {existing.map((r) => {
+              const wt = WEEK_TYPE_OPTIONS.find((o) => o.value === r.week_type)
+              const active = selectedId === r.id
+              return (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => selectExistingForEdit(r.id)}
+                  className={cn(
+                    'inline-flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-medium',
+                    active
+                      ? 'border-zinc-900 bg-zinc-900 text-white'
+                      : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
+                  )}
+                >
+                  {r.week_type !== 'all' && (
+                    <span className="rounded-sm bg-white/20 px-1 text-[9px] font-bold">
+                      {wt?.short}
+                    </span>
+                  )}
+                  <span className="max-w-[80px] truncate">
+                    {r.group_name || r.classroom}
                   </span>
-                  <span className="inline-flex h-6 shrink-0 items-center rounded-md border border-zinc-200 bg-zinc-50 px-2 text-[11px] font-medium text-zinc-700 tabular-nums">
-                    {s.period}교시
-                  </span>
-                  <span className="min-w-0 flex-1 truncate font-medium text-zinc-900">
-                    {s.classroom}
-                  </span>
-                  <span className="shrink-0 text-xs text-zinc-500">
-                    {s.grade}학년 {s.class_number}반
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => removeSchedule(s)}
-                    disabled={busy}
-                    aria-label="시간표 삭제"
-                    className="text-zinc-400 hover:bg-red-50 hover:text-red-600"
-                  >
-                    {busy ? (
-                      <Loader2Icon className="h-3.5 w-3.5 animate-spin" />
-                    ) : (
-                      <Trash2Icon className="h-3.5 w-3.5" />
-                    )}
-                  </Button>
-                </li>
+                </button>
               )
             })}
-          </ul>
+            {existing.length < 3 && selectedId && (
+              <button
+                type="button"
+                onClick={startNew}
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-dashed border-zinc-300 bg-white px-2 text-xs font-medium text-zinc-500 hover:bg-zinc-50"
+              >
+                <PlusIcon className="h-3 w-3" />
+                <span>다른 주기 추가</span>
+              </button>
+            )}
+          </div>
         )}
 
-        {adding ? (
-          <div className="space-y-3 rounded-lg border border-zinc-200 bg-zinc-50/60 p-3">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="sch-day">요일</Label>
-                <Select value={day} onValueChange={setDay}>
-                  <SelectTrigger id="sch-day" className="h-9 w-full">
-                    <SelectValue placeholder="요일" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DAY_LABELS.map((d, i) => (
-                      <SelectItem key={d} value={String(i + 1)}>
-                        {d}요일
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="sch-period">교시</Label>
-                <Select value={period} onValueChange={setPeriod}>
-                  <SelectTrigger id="sch-period" className="h-9 w-full">
-                    <SelectValue placeholder="교시" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {PERIODS.map((p) => (
-                      <SelectItem key={p} value={String(p)}>
-                        {p}교시
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+        <div className="space-y-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="cell-group">수업/반/팀 이름</Label>
+            <Input
+              id="cell-group"
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              placeholder='예: "일반화학I", "2학년 3반", "수강신청반"'
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="cell-classroom">교실</Label>
+            <Input
+              id="cell-classroom"
+              value={classroom}
+              onChange={(e) => setClassroom(e.target.value)}
+              placeholder="예: 3-2 교실 / 물리실 2"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="cell-grade">학년</Label>
+              <Select value={grade} onValueChange={setGrade}>
+                <SelectTrigger id="cell-grade" className="h-9 w-full">
+                  <SelectValue placeholder="학년" />
+                </SelectTrigger>
+                <SelectContent>
+                  {GRADES.map((g) => (
+                    <SelectItem key={g} value={String(g)}>
+                      {g}학년
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="sch-classroom">교실</Label>
-              <Input
-                id="sch-classroom"
-                placeholder="예: 3-2 교실 / 물리실 2"
-                value={classroom}
-                onChange={(e) => setClassroom(e.target.value)}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              <div className="space-y-1.5">
-                <Label htmlFor="sch-grade">학년</Label>
-                <Select value={grade} onValueChange={setGrade}>
-                  <SelectTrigger id="sch-grade" className="h-9 w-full">
-                    <SelectValue placeholder="학년" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {GRADES.map((g) => (
-                      <SelectItem key={g} value={String(g)}>
-                        {g}학년
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label htmlFor="sch-class">반</Label>
-                <Select value={classNumber} onValueChange={setClassNumber}>
-                  <SelectTrigger id="sch-class" className="h-9 w-full">
-                    <SelectValue placeholder="반" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CLASS_OPTIONS.map((c) => (
-                      <SelectItem key={c} value={String(c)}>
-                        {c}반
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={cancelAdd}
-                disabled={saving}
-                className="flex-1"
-              >
-                취소
-              </Button>
-              <Button
-                type="button"
-                onClick={addSchedule}
-                disabled={
-                  saving ||
-                  !day ||
-                  !period ||
-                  !classroom.trim() ||
-                  !grade ||
-                  !classNumber
-                }
-                className="flex-1 bg-zinc-900 text-white hover:bg-zinc-800"
-              >
-                {saving ? (
-                  <>
-                    <Loader2Icon className="h-4 w-4 animate-spin" />
-                    <span className="ml-1.5">추가 중…</span>
-                  </>
-                ) : (
-                  '추가'
-                )}
-              </Button>
+              <Label htmlFor="cell-class">반</Label>
+              <Select value={classNumber} onValueChange={setClassNumber}>
+                <SelectTrigger id="cell-class" className="h-9 w-full">
+                  <SelectValue placeholder="반" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CLASS_OPTIONS.map((c) => (
+                    <SelectItem key={c} value={String(c)}>
+                      {c}반
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
-        ) : (
-          <Button
-            type="button"
-            variant="outline"
-            onClick={startAdd}
-            className="h-10 w-full rounded-lg border-dashed border-zinc-300 text-zinc-700 hover:bg-zinc-50"
-          >
-            <PlusIcon className="h-4 w-4" />
-            <span className="ml-1.5">시간표 추가</span>
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+
+          <div className="space-y-1.5">
+            <Label>주기</Label>
+            <div className="grid grid-cols-3 gap-1.5">
+              {WEEK_TYPE_OPTIONS.map((opt) => {
+                const active = weekType === opt.value
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setWeekType(opt.value)}
+                    className={cn(
+                      'rounded-md border py-2 text-xs font-medium transition-colors',
+                      active
+                        ? 'border-zinc-900 bg-zinc-900 text-white'
+                        : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
+                    )}
+                    aria-pressed={active}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-between">
+          <div>
+            {selectedId && (
+              <Button
+                variant="outline"
+                onClick={() => remove(selectedId)}
+                disabled={saving || !!busyId}
+                className="w-full text-red-600 hover:bg-red-50 sm:w-auto"
+              >
+                {busyId === selectedId ? (
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    <Trash2Icon className="h-4 w-4" />
+                    <span className="ml-1.5">삭제</span>
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={saving}
+              className="flex-1 sm:flex-none"
+            >
+              취소
+            </Button>
+            <Button
+              onClick={save}
+              disabled={!canSave}
+              className="flex-1 bg-zinc-900 text-white hover:bg-zinc-800 sm:flex-none"
+            >
+              {saving ? (
+                <>
+                  <Loader2Icon className="h-4 w-4 animate-spin" />
+                  <span className="ml-1.5">저장 중…</span>
+                </>
+              ) : selectedId ? (
+                '저장'
+              ) : (
+                '추가'
+              )}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

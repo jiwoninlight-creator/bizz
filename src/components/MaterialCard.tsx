@@ -7,12 +7,14 @@ import {
   ImageIcon,
   DownloadIcon,
   ExternalLinkIcon,
+  LinkIcon,
   PencilIcon,
   Trash2Icon,
 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { cn } from '@/lib/utils'
 import type { MaterialFileType, MaterialWithTeacher } from '@/types/database'
 
 type FileTypeStyle = {
@@ -50,6 +52,13 @@ const FILE_TYPE_STYLES: Record<MaterialFileType, FileTypeStyle> = {
     label: 'FILE',
     bg: 'bg-zinc-100 border border-zinc-200',
     fg: 'text-zinc-600',
+    ext: '',
+  },
+  link: {
+    Icon: LinkIcon,
+    label: 'LINK',
+    bg: 'bg-blue-50 border border-blue-100',
+    fg: 'text-blue-600',
     ext: '',
   },
 }
@@ -143,12 +152,21 @@ export default function MaterialCard({
   const isOwnPending =
     material.status === 'pending' && material.uploaded_by === currentUserId
   const isPending = material.status === 'pending'
-  const isInline = material.file_type === 'pdf' || material.file_type === 'image'
+  const isLink = material.file_type === 'link'
+  const isInline =
+    !isLink && (material.file_type === 'pdf' || material.file_type === 'image')
   const displayFilename = material.original_filename ?? null
   const showOriginal =
-    !!displayFilename && displayFilename.trim() !== material.title.trim()
+    !isLink &&
+    !!displayFilename &&
+    displayFilename.trim() !== material.title.trim()
 
   const handleClick = () => {
+    if (isLink) {
+      const url = material.link_url || material.file_url
+      if (url) window.open(url, '_blank', 'noopener,noreferrer')
+      return
+    }
     if (isInline) {
       window.open(material.file_url, '_blank', 'noopener,noreferrer')
     } else {
@@ -256,8 +274,18 @@ export default function MaterialCard({
             <span className="font-mono tabular-nums">
               {formatDate(material.created_at)}
             </span>
-            <span className="flex items-center gap-1 text-zinc-500">
-              {isInline ? (
+            <span
+              className={cn(
+                'flex items-center gap-1',
+                isLink ? 'text-blue-600' : 'text-zinc-500'
+              )}
+            >
+              {isLink ? (
+                <>
+                  <LinkIcon className="h-3 w-3" />
+                  링크 열기
+                </>
+              ) : isInline ? (
                 <>
                   <ExternalLinkIcon className="h-3 w-3" />
                   열기
