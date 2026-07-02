@@ -57,8 +57,8 @@ export type TeacherSchedule = {
   day_of_week: number
   period: number
   classroom: string
-  grade: number
-  class_number: number
+  grade: number | null
+  class_number: number | null
   group_name: string | null
   week_type: WeekType
 }

@@ -115,17 +115,6 @@ const PURPOSE_OPTIONS: { value: MessagePurpose; label: string }[] = [
 const DAY_LABELS = ['월', '화', '수', '목', '금'] as const
 const PERIODS = [1, 2, 3, 4, 5, 6, 7, 8, 9] as const
 
-// 학기 시작일 (월요일). 이 날 포함 주 = 1주차(홀).
-const SEMESTER_START = new Date(2026, 2, 2) // 2026-03-02 (월)
-
-function currentWeekType(now: Date = new Date()): Exclude<WeekType, 'all'> {
-  const startMs = SEMESTER_START.getTime()
-  const nowMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()
-  const weeks = Math.floor((nowMs - startMs) / (7 * 24 * 3600 * 1000))
-  // week 0 = 홀, week 1 = 짝, ...
-  return weeks % 2 === 0 ? 'odd' : 'even'
-}
-
 function initial(name: string): string {
   return name.trim().slice(0, 1) || '?'
 }
@@ -201,31 +190,16 @@ function ScheduleGrid({
   schedules: TeacherSchedule[]
   loading: boolean
 }) {
-  const thisWeek = useMemo(() => currentWeekType(), [])
-
-  // 오늘 주차와 일치하지 않는 격주 수업은 제외.
-  // (day, period) 셀에는 이번 주에 열리는 수업 중 하나만 선택.
-  const map = useMemo(() => {
-    const byCell = new Map<string, TeacherSchedule[]>()
+  const byCell = useMemo(() => {
+    const map = new Map<string, TeacherSchedule[]>()
     for (const s of schedules) {
       const key = `${s.day_of_week}-${s.period}`
-      const arr = byCell.get(key) ?? []
+      const arr = map.get(key) ?? []
       arr.push(s)
-      byCell.set(key, arr)
+      map.set(key, arr)
     }
-    const filtered = new Map<string, TeacherSchedule>()
-    for (const [key, list] of byCell) {
-      // 이번 주에 열리는 것: 'all' or 오늘 주차와 같은 week_type
-      const applicable = list.filter(
-        (s) => s.week_type === 'all' || s.week_type === thisWeek
-      )
-      // 'all' 이 있으면 우선, 아니면 첫번째
-      const chosen =
-        applicable.find((s) => s.week_type === 'all') ?? applicable[0]
-      if (chosen) filtered.set(key, chosen)
-    }
-    return filtered
-  }, [schedules, thisWeek])
+    return map
+  }, [schedules])
 
   if (loading) {
     return (
@@ -245,19 +219,20 @@ function ScheduleGrid({
   }
 
   return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-end gap-1.5 text-[10px] text-zinc-500">
-        <span
-          className={cn(
-            'inline-flex h-4 items-center rounded-sm px-1 font-semibold',
-            thisWeek === 'odd'
-              ? 'bg-indigo-500 text-white'
-              : 'bg-indigo-400 text-white'
-          )}
-        >
-          {thisWeek === 'odd' ? '홀' : '짝'}수주
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[10px] text-zinc-500">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-3 w-5 rounded border border-blue-200 bg-blue-50" />
+          매주
         </span>
-        <span>기준 표시</span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-3 w-5 rounded bg-zinc-900" />
+          홀수주
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="h-3 w-5 rounded border border-zinc-900 bg-white" />
+          짝수주
+        </span>
       </div>
       <div className="grid grid-cols-6 gap-1 text-[10px]">
         <div />
@@ -275,41 +250,99 @@ function ScheduleGrid({
               {p}교시
             </div>
             {DAY_LABELS.map((_, dayIdx) => {
-              const s = map.get(`${dayIdx + 1}-${p}`)
-              const primary = s?.group_name?.trim() || s?.classroom
+              const items = byCell.get(`${dayIdx + 1}-${p}`) ?? []
               return (
-                <div
-                  key={dayIdx}
-                  className={cn(
-                    'relative flex min-h-11 flex-col items-center justify-center rounded-md p-1 text-center',
-                    s
-                      ? 'border border-indigo-100 bg-indigo-50 text-indigo-900'
-                      : 'border border-zinc-100 bg-zinc-50'
-                  )}
-                >
-                  {s && (
-                    <>
-                      {s.week_type !== 'all' && (
-                        <span className="absolute right-0.5 top-0.5 rounded-sm bg-indigo-500 px-0.5 text-[8px] font-bold text-white">
-                          {s.week_type === 'odd' ? '홀' : '짝'}
-                        </span>
-                      )}
-                      <span className="line-clamp-1 text-[11px] font-semibold leading-tight">
-                        {primary}
-                      </span>
-                      {s.group_name && s.classroom !== s.group_name && (
-                        <span className="line-clamp-1 text-[9px] leading-tight text-indigo-700/70">
-                          {s.classroom}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </div>
+                <ScheduleGridCell key={dayIdx} items={items} />
               )
             })}
           </Fragment>
         ))}
       </div>
+    </div>
+  )
+}
+
+function ScheduleGridCell({ items }: { items: TeacherSchedule[] }) {
+  const all = items.find((i) => i.week_type === 'all')
+  const odd = items.find((i) => i.week_type === 'odd')
+  const even = items.find((i) => i.week_type === 'even')
+
+  if (items.length === 0) {
+    return <div className="min-h-11 rounded-md bg-zinc-50" />
+  }
+
+  if (all) {
+    const name = all.group_name?.trim() || all.classroom
+    return (
+      <div className="flex min-h-11 flex-col items-center justify-center rounded-md border border-blue-200 bg-blue-50 p-1 text-center text-blue-700">
+        <span className="line-clamp-1 text-[10px] font-medium">{name}</span>
+        {all.group_name && all.classroom !== all.group_name && (
+          <span className="line-clamp-1 text-[9px] opacity-70">
+            {all.classroom}
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex min-h-11 flex-col overflow-hidden rounded-md border border-zinc-200">
+      <ScheduleHalfCell item={odd} kind="odd" />
+      <ScheduleHalfCell item={even} kind="even" />
+    </div>
+  )
+}
+
+function ScheduleHalfCell({
+  item,
+  kind,
+}: {
+  item: TeacherSchedule | undefined
+  kind: 'odd' | 'even'
+}) {
+  const name = item?.group_name?.trim() || item?.classroom
+
+  if (kind === 'odd') {
+    return (
+      <div
+        className={cn(
+          'flex flex-1 flex-col justify-center px-1 py-0.5 text-center',
+          item ? 'bg-zinc-900 text-white' : 'bg-zinc-100'
+        )}
+      >
+        {item && (
+          <>
+            <span className="line-clamp-1 text-[10px] font-medium">{name}</span>
+            {item.group_name && item.classroom !== item.group_name && (
+              <span className="line-clamp-1 text-[9px] opacity-70">
+                {item.classroom}
+              </span>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={cn(
+        'flex flex-1 flex-col justify-center border-t border-zinc-200 px-1 py-0.5 text-center',
+        item
+          ? 'border-zinc-900 bg-white text-zinc-900'
+          : 'bg-zinc-50 text-zinc-300'
+      )}
+    >
+      {item && (
+        <>
+          <span className="line-clamp-1 text-[10px] font-medium">{name}</span>
+          {item.group_name && item.classroom !== item.group_name && (
+            <span className="line-clamp-1 text-[9px] opacity-70">
+              {item.classroom}
+            </span>
+          )}
+        </>
+      )}
     </div>
   )
 }

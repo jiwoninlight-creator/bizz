@@ -1272,6 +1272,20 @@ function TeacherScheduleCard({
         </CardDescription>
       </CardHeader>
       <CardContent>
+        <div className="mb-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1.5 text-[10px] text-zinc-500">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-5 rounded border border-blue-200 bg-blue-50" />
+            매주
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-5 rounded bg-zinc-900" />
+            홀수주
+          </span>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="h-3 w-5 rounded border border-zinc-900 bg-white" />
+            짝수주
+          </span>
+        </div>
         <div className="overflow-x-auto">
           <div className="min-w-[520px]">
             <div className="grid grid-cols-6 gap-1">
@@ -1339,7 +1353,7 @@ function ScheduleCell({
       <button
         type="button"
         onClick={onOpen}
-        className="group flex h-16 items-center justify-center rounded-md border border-zinc-100 bg-zinc-50/50 text-zinc-300 transition-colors duration-150 hover:bg-zinc-100"
+        className="group flex h-16 items-center justify-center rounded-md border border-zinc-100 bg-zinc-50 text-zinc-300 transition-colors duration-150 hover:bg-zinc-100"
         aria-label="시간표 추가"
       >
         <PlusIcon
@@ -1350,75 +1364,87 @@ function ScheduleCell({
     )
   }
 
+  const all = items.find((i) => i.week_type === 'all')
   const odd = items.find((i) => i.week_type === 'odd')
   const even = items.find((i) => i.week_type === 'even')
-  const all = items.find((i) => i.week_type === 'all')
 
   if (all) {
+    const name = all.group_name?.trim() || all.classroom
     return (
       <button
         type="button"
         onClick={onOpen}
-        className="flex h-16 flex-col justify-center gap-0.5 rounded-md border border-zinc-200 bg-white px-1.5 text-left transition-colors duration-150 hover:border-zinc-300 hover:bg-zinc-50"
+        className="flex h-16 flex-col items-center justify-center rounded-md border border-blue-200 bg-blue-50 px-1.5 text-center text-blue-700 transition-colors duration-150 hover:border-blue-300"
       >
-        <span className="line-clamp-1 text-[11px] font-medium leading-tight text-zinc-900">
-          {all.group_name || all.classroom}
-        </span>
-        <span className="line-clamp-1 text-[10px] leading-tight text-zinc-400">
-          {all.classroom}
-        </span>
+        <span className="line-clamp-1 text-[10px] font-medium">{name}</span>
+        {all.group_name && all.classroom !== all.group_name && (
+          <span className="line-clamp-1 text-[9px] opacity-70">
+            {all.classroom}
+          </span>
+        )}
       </button>
     )
   }
 
-  // 격주 표시 (홀 위/짝 아래)
   return (
     <button
       type="button"
       onClick={onOpen}
-      className="flex h-16 flex-col overflow-hidden rounded-md border border-zinc-200 bg-white transition-colors duration-150 hover:border-zinc-300"
+      className="flex h-16 flex-col overflow-hidden rounded-md border border-zinc-200 transition-colors duration-150 hover:border-zinc-300"
     >
-      <BiWeeklyRow item={odd} kind="odd" />
-      <div className="h-px w-full bg-zinc-100" />
-      <BiWeeklyRow item={even} kind="even" />
+      <ScheduleEditHalfCell item={odd} kind="odd" />
+      <ScheduleEditHalfCell item={even} kind="even" />
     </button>
   )
 }
 
-function BiWeeklyRow({
+function ScheduleEditHalfCell({
   item,
   kind,
 }: {
   item: TeacherSchedule | undefined
   kind: 'odd' | 'even'
 }) {
-  const dotStyle =
-    kind === 'odd'
-      ? 'bg-indigo-100 text-indigo-700'
-      : 'bg-amber-100 text-amber-700'
-  return (
-    <div className="flex flex-1 items-center gap-1 px-1.5 text-left">
-      <span
+  const name = item?.group_name?.trim() || item?.classroom
+
+  if (kind === 'odd') {
+    return (
+      <div
         className={cn(
-          'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold',
-          dotStyle
+          'flex flex-1 flex-col justify-center px-1 py-0.5 text-left',
+          item ? 'bg-zinc-900 text-white' : 'bg-zinc-100'
         )}
       >
-        {kind === 'odd' ? '홀' : '짝'}
-      </span>
-      {item ? (
-        <div className="min-w-0 flex-1 leading-tight">
-          <div className="line-clamp-1 text-[10px] font-medium text-zinc-900">
-            {item.group_name || item.classroom}
-          </div>
+        {item && (
+          <>
+            <div className="line-clamp-1 text-[10px] font-medium">{name}</div>
+            {item.group_name && item.classroom !== item.group_name && (
+              <div className="line-clamp-1 text-[9px] opacity-70">
+                {item.classroom}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={cn(
+        'flex flex-1 flex-col justify-center border-t border-zinc-200 px-1 py-0.5 text-left',
+        item ? 'bg-white text-zinc-900' : 'bg-zinc-50'
+      )}
+    >
+      {item && (
+        <>
+          <div className="line-clamp-1 text-[10px] font-medium">{name}</div>
           {item.group_name && item.classroom !== item.group_name && (
-            <div className="line-clamp-1 text-[9px] text-zinc-400">
+            <div className="line-clamp-1 text-[9px] opacity-70">
               {item.classroom}
             </div>
           )}
-        </div>
-      ) : (
-        <span className="text-[10px] text-zinc-300">비어 있음</span>
+        </>
       )}
     </div>
   )
@@ -1446,8 +1472,6 @@ function ScheduleCellDialog({
   // 새로 추가할 때는 빈 값, 편집 시엔 기존 값
   const [groupName, setGroupName] = useState('')
   const [classroom, setClassroom] = useState('')
-  const [grade, setGrade] = useState<string>('')
-  const [classNumber, setClassNumber] = useState<string>('')
   const [weekType, setWeekType] = useState<WeekType>('all')
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -1468,8 +1492,6 @@ function ScheduleCellDialog({
       setSelectedId(null)
       setGroupName('')
       setClassroom('')
-      setGrade('')
-      setClassNumber('')
       // 기본 weekType: 아직 없는 것 선호. 아무것도 없으면 all
       const usedTypes = new Set(existing.map((e) => e.week_type))
       if (usedTypes.has('all')) setWeekType('odd')
@@ -1482,8 +1504,6 @@ function ScheduleCellDialog({
   const hydrateFrom = (r: TeacherSchedule) => {
     setGroupName(r.group_name ?? '')
     setClassroom(r.classroom)
-    setGrade(String(r.grade))
-    setClassNumber(String(r.class_number))
     setWeekType(r.week_type)
   }
 
@@ -1498,8 +1518,6 @@ function ScheduleCellDialog({
     setSelectedId(null)
     setGroupName('')
     setClassroom('')
-    setGrade('')
-    setClassNumber('')
     const usedTypes = new Set(
       existing
         .filter((e) => e.id !== selectedId)
@@ -1514,9 +1532,7 @@ function ScheduleCellDialog({
   const canSave =
     !saving &&
     groupName.trim().length > 0 &&
-    classroom.trim().length > 0 &&
-    grade !== '' &&
-    classNumber !== ''
+    classroom.trim().length > 0
 
   const save = async () => {
     if (!canSave) return
@@ -1552,8 +1568,8 @@ function ScheduleCellDialog({
         day_of_week: day,
         period,
         classroom: classroom.trim(),
-        grade: Number(grade),
-        class_number: Number(classNumber),
+        grade: null,
+        class_number: null,
         group_name: groupName.trim() || null,
         week_type: weekType,
       }
@@ -1681,39 +1697,6 @@ function ScheduleCellDialog({
               onChange={(e) => setClassroom(e.target.value)}
               placeholder="예: 3-2 교실 / 물리실 2"
             />
-          </div>
-
-          <div className="grid grid-cols-2 gap-2">
-            <div className="space-y-1.5">
-              <Label htmlFor="cell-grade">학년</Label>
-              <Select value={grade} onValueChange={setGrade}>
-                <SelectTrigger id="cell-grade" className="h-9 w-full">
-                  <SelectValue placeholder="학년" />
-                </SelectTrigger>
-                <SelectContent>
-                  {GRADES.map((g) => (
-                    <SelectItem key={g} value={String(g)}>
-                      {g}학년
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="cell-class">반</Label>
-              <Select value={classNumber} onValueChange={setClassNumber}>
-                <SelectTrigger id="cell-class" className="h-9 w-full">
-                  <SelectValue placeholder="반" />
-                </SelectTrigger>
-                <SelectContent>
-                  {CLASS_OPTIONS.map((c) => (
-                    <SelectItem key={c} value={String(c)}>
-                      {c}반
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
           </div>
 
           <div className="space-y-1.5">
