@@ -29,6 +29,7 @@ export async function proxy(request: NextRequest) {
 
   const path = request.nextUrl.pathname
   const isAuthPage = path === '/login'
+  const isLandingPage = path === '/'
   const isAuthCallback = path.startsWith('/auth')
   const isPublicAsset =
     path.startsWith('/_next') || path.includes('.')
@@ -38,7 +39,7 @@ export async function proxy(request: NextRequest) {
   }
 
   if (!user) {
-    if (isAuthPage) return response
+    if (isAuthPage || isLandingPage) return response
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
