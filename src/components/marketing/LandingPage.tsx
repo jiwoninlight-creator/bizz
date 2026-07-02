@@ -1,6 +1,7 @@
 import Link from 'next/link'
-import { ArrowDownIcon, ArrowRightIcon } from 'lucide-react'
+import { ArrowDownIcon } from 'lucide-react'
 import FeatureCards from '@/components/marketing/FeatureCards'
+import StartButton from '@/components/marketing/StartButton'
 
 function BizzLogo({ size = 'sm' }: { size?: 'sm' | 'lg' }) {
   const box =
@@ -37,7 +38,7 @@ function GradientBlobs({ subtle = false }: { subtle?: boolean }) {
   )
 }
 
-export default function LandingPage() {
+export default function LandingPage({ isLoggedIn }: { isLoggedIn: boolean }) {
   return (
     <div className="bg-zinc-950 text-white">
       {/* Hero */}
@@ -69,13 +70,7 @@ export default function LandingPage() {
             선생님을 찾고, 일정을 챙기고, 자료를 모으는 그 모든 불편함을
             끝내세요
           </p>
-          <Link
-            href="/login"
-            className="mt-10 inline-flex items-center gap-2 rounded-full bg-white px-8 py-4 text-base font-semibold text-zinc-900 transition-colors hover:bg-zinc-100"
-          >
-            시작하기
-            <ArrowRightIcon className="h-4 w-4" />
-          </Link>
+          <StartButton isLoggedIn={isLoggedIn} variant="hero" />
         </div>
 
         <div className="relative z-10 flex justify-center pb-10">
@@ -92,13 +87,7 @@ export default function LandingPage() {
           <p className="text-xl font-semibold text-white sm:text-2xl">
             학교 계정으로 3초 만에 시작하세요
           </p>
-          <Link
-            href="/login"
-            className="mt-8 inline-flex items-center gap-2 rounded-full bg-white px-10 py-4 text-base font-semibold text-zinc-900 transition-colors hover:bg-zinc-100"
-          >
-            지금 시작하기
-            <ArrowRightIcon className="h-4 w-4" />
-          </Link>
+          <StartButton isLoggedIn={isLoggedIn} variant="cta" />
           <p className="mt-12 text-xs text-zinc-500">
             BIZZ · 우리 학교 학생들이 만든 서비스
           </p>

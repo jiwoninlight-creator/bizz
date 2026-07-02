@@ -165,7 +165,7 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-30 border-b border-zinc-200 bg-white/95 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-2xl items-center justify-between px-4">
-        <Link href="/calendar" className="flex items-center gap-2">
+        <Link href="/" className="flex cursor-pointer items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-md bg-zinc-900">
             <span className="text-sm font-bold text-white">B</span>
           </div>

@@ -43,6 +43,10 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 
+  if (isLandingPage) {
+    return response
+  }
+
   if (isAuthPage) {
     return NextResponse.redirect(new URL('/calendar', request.url))
   }
@@ -63,7 +67,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/admin', request.url))
   }
 
-  if (!isAdmin && !onboarded && !isOnboardingPage) {
+  if (!isAdmin && !onboarded && !isOnboardingPage && !isLandingPage) {
     return NextResponse.redirect(new URL('/onboarding', request.url))
   }
 
