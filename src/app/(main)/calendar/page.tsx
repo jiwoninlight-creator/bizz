@@ -37,6 +37,7 @@ import type {
 import { cn, getErrorMessage } from '@/lib/utils'
 import { toast } from 'sonner'
 import { SCHOOL_PERIODS, findPeriodByValue } from '@/lib/school-schedule'
+import { getWeekTypeForDate } from '@/lib/week-utils'
 import EmptyState from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -346,6 +347,13 @@ export default function CalendarPage() {
   const [savingMemo, setSavingMemo] = useState(false)
 
   const gridDays = useMemo(() => buildCalendarGrid(currentMonth), [currentMonth])
+  const calendarWeeks = useMemo(() => {
+    const weeks: Date[][] = []
+    for (let i = 0; i < gridDays.length; i += 7) {
+      weeks.push(gridDays.slice(i, i + 7))
+    }
+    return weeks
+  }, [gridDays])
   const gridStart = gridDays[0]
   const gridEnd = gridDays[gridDays.length - 1]
 
@@ -1144,6 +1152,21 @@ export default function CalendarPage() {
         </Button>
       </div>
 
+      <div className="flex items-center justify-center gap-3 text-[10px] text-zinc-500">
+        <span className="inline-flex items-center gap-1.5">
+          <span className="flex h-4 w-4 items-center justify-center rounded bg-zinc-900 text-[9px] font-bold text-white">
+            홀
+          </span>
+          홀수주
+        </span>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="flex h-4 w-4 items-center justify-center rounded border border-zinc-900 text-[9px] font-bold text-zinc-900">
+            짝
+          </span>
+          짝수주
+        </span>
+      </div>
+
       <div className="flex items-center justify-end">
         <button
           type="button"
@@ -1167,7 +1190,8 @@ export default function CalendarPage() {
       {view === 'calendar' ? (
         <>
           <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
-            <div className="grid grid-cols-7 border-b border-zinc-200 bg-zinc-50/60">
+            <div className="grid grid-cols-[2rem_repeat(7,minmax(0,1fr))] border-b border-zinc-200 bg-zinc-50/60">
+              <div aria-hidden className="border-r border-zinc-200" />
               {WEEKDAYS.map((w, i) => (
                 <div
                   key={w}
@@ -1183,107 +1207,131 @@ export default function CalendarPage() {
               ))}
             </div>
 
-            <div className="grid grid-cols-7">
-              {gridDays.map((d, idx) => {
-                const key = toDateKey(d)
-                const inMonth = d.getMonth() === currentMonth.getMonth()
-                const isToday = isSameDay(d, today)
-                const isSelected = isSameDay(d, selectedDate)
-                const dayEvents = eventsByDate.get(key) ?? []
-                const visibleDay = showCompleted
-                  ? dayEvents.filter((e) => isEventCompleted(e))
-                  : dayEvents.filter((e) => !isEventCompleted(e))
-                const typesInDay = new Set(visibleDay.map((e) => e.event_type))
-                const dayOfWeek = d.getDay()
-                const hasMemo = memoByDate.has(key)
-                const daySchool = schoolEventsByDate.get(key) ?? []
-                const primarySchool = daySchool[0]
-                const schoolMeta = primarySchool
-                  ? SCHOOL_CATEGORY_META[primarySchool.category]
-                  : null
-                const col = idx % 7
-                const row = Math.floor(idx / 7)
-                const rows = Math.ceil(gridDays.length / 7)
+            {calendarWeeks.map((weekDays, row) => {
+              const weekType = getWeekTypeForDate(weekDays[0])
+              const isLastRow = row === calendarWeeks.length - 1
 
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setSelectedDate(startOfDay(d))}
+              return (
+                <div
+                  key={weekDays[0].toISOString()}
+                  className="grid grid-cols-[2rem_repeat(7,minmax(0,1fr))]"
+                >
+                  <div
                     className={cn(
-                      'relative flex aspect-square flex-col items-center justify-start p-1 text-[13px] transition-all duration-100 active:scale-[0.98]',
-                      col !== 6 && 'border-r border-zinc-100',
-                      row !== rows - 1 && 'border-b border-zinc-100',
-                      'hover:bg-zinc-50',
-                      // 학사일정 배경 (선택되지 않은 날짜에만 은은하게)
-                      !isSelected && schoolMeta && schoolMeta.cellBg,
-                      isSelected && 'bg-indigo-50 hover:bg-indigo-50',
-                      !inMonth && 'text-zinc-300',
-                      inMonth && dayOfWeek === 0 && 'text-red-500',
-                      inMonth && dayOfWeek === 6 && 'text-indigo-500',
-                      inMonth &&
-                        dayOfWeek !== 0 &&
-                        dayOfWeek !== 6 &&
-                        'text-zinc-800',
-                      inMonth &&
-                        !isSelected &&
-                        schoolMeta &&
-                        primarySchool?.category === 'holiday' &&
-                        'text-red-600',
-                      isSelected && 'font-semibold text-indigo-700'
+                      'flex items-center justify-center border-r border-zinc-100 bg-zinc-50/40',
+                      !isLastRow && 'border-b border-zinc-100'
                     )}
-                    title={
-                      daySchool.length > 0
-                        ? daySchool.map((s) => s.title).join(' · ')
-                        : undefined
-                    }
                   >
-                    <span
-                      className={cn(
-                        'mt-1 flex h-6 w-6 items-center justify-center rounded-md font-medium tabular-nums',
-                        isToday
-                          ? 'bg-zinc-900 text-white'
-                          : isSelected
-                            ? 'text-indigo-700'
-                            : ''
-                      )}
-                    >
-                      {d.getDate()}
-                    </span>
-                    {hasMemo && (
-                      <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-indigo-400" />
-                    )}
-                    {daySchool.length > 0 && (
-                      <div
-                        className={cn(
-                          'mt-0.5 line-clamp-1 w-full px-0.5 text-center text-[9px] font-medium leading-tight',
-                          !isSelected && schoolMeta
-                            ? schoolMeta.cellText
-                            : 'text-zinc-600',
-                          isSelected && 'text-indigo-700'
-                        )}
-                      >
-                        {primarySchool?.title}
-                        {daySchool.length > 1 && ` +${daySchool.length - 1}`}
+                    {weekType === 'odd' ? (
+                      <div className="mx-auto flex h-6 w-6 items-center justify-center rounded bg-zinc-900 text-[10px] font-bold text-white">
+                        홀
+                      </div>
+                    ) : (
+                      <div className="mx-auto flex h-6 w-6 items-center justify-center rounded border border-zinc-900 text-[10px] font-bold text-zinc-900">
+                        짝
                       </div>
                     )}
-                    <div className="mt-auto mb-1 flex h-1 items-center gap-0.5">
-                      {EVENT_TYPE_ORDER.map((t) =>
-                        typesInDay.has(t) ? (
-                          <span
-                            key={t}
+                  </div>
+
+                  {weekDays.map((d, col) => {
+                    const key = toDateKey(d)
+                    const inMonth = d.getMonth() === currentMonth.getMonth()
+                    const isToday = isSameDay(d, today)
+                    const isSelected = isSameDay(d, selectedDate)
+                    const dayEvents = eventsByDate.get(key) ?? []
+                    const visibleDay = showCompleted
+                      ? dayEvents.filter((e) => isEventCompleted(e))
+                      : dayEvents.filter((e) => !isEventCompleted(e))
+                    const typesInDay = new Set(visibleDay.map((e) => e.event_type))
+                    const dayOfWeek = d.getDay()
+                    const hasMemo = memoByDate.has(key)
+                    const daySchool = schoolEventsByDate.get(key) ?? []
+                    const primarySchool = daySchool[0]
+                    const schoolMeta = primarySchool
+                      ? SCHOOL_CATEGORY_META[primarySchool.category]
+                      : null
+
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setSelectedDate(startOfDay(d))}
+                        className={cn(
+                          'relative flex aspect-square flex-col items-center justify-start p-1 text-[13px] transition-all duration-100 active:scale-[0.98]',
+                          col !== 6 && 'border-r border-zinc-100',
+                          !isLastRow && 'border-b border-zinc-100',
+                          'hover:bg-zinc-50',
+                          !isSelected && schoolMeta && schoolMeta.cellBg,
+                          isSelected && 'bg-indigo-50 hover:bg-indigo-50',
+                          !inMonth && 'text-zinc-300',
+                          inMonth && dayOfWeek === 0 && 'text-red-500',
+                          inMonth && dayOfWeek === 6 && 'text-indigo-500',
+                          inMonth &&
+                            dayOfWeek !== 0 &&
+                            dayOfWeek !== 6 &&
+                            'text-zinc-800',
+                          inMonth &&
+                            !isSelected &&
+                            schoolMeta &&
+                            primarySchool?.category === 'holiday' &&
+                            'text-red-600',
+                          isSelected && 'font-semibold text-indigo-700'
+                        )}
+                        title={
+                          daySchool.length > 0
+                            ? daySchool.map((s) => s.title).join(' · ')
+                            : undefined
+                        }
+                      >
+                        <span
+                          className={cn(
+                            'mt-1 flex h-6 w-6 items-center justify-center rounded-md font-medium tabular-nums',
+                            isToday
+                              ? 'bg-zinc-900 text-white'
+                              : isSelected
+                                ? 'text-indigo-700'
+                                : ''
+                          )}
+                        >
+                          {d.getDate()}
+                        </span>
+                        {hasMemo && (
+                          <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-indigo-400" />
+                        )}
+                        {daySchool.length > 0 && (
+                          <div
                             className={cn(
-                              'h-1 w-1 rounded-full',
-                              EVENT_TYPE_META[t].dot
+                              'mt-0.5 line-clamp-1 w-full px-0.5 text-center text-[9px] font-medium leading-tight',
+                              !isSelected && schoolMeta
+                                ? schoolMeta.cellText
+                                : 'text-zinc-600',
+                              isSelected && 'text-indigo-700'
                             )}
-                          />
-                        ) : null
-                      )}
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
+                          >
+                            {primarySchool?.title}
+                            {daySchool.length > 1 &&
+                              ` +${daySchool.length - 1}`}
+                          </div>
+                        )}
+                        <div className="mt-auto mb-1 flex h-1 items-center gap-0.5">
+                          {EVENT_TYPE_ORDER.map((t) =>
+                            typesInDay.has(t) ? (
+                              <span
+                                key={t}
+                                className={cn(
+                                  'h-1 w-1 rounded-full',
+                                  EVENT_TYPE_META[t].dot
+                                )}
+                              />
+                            ) : null
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })}
           </div>
 
           {selectedSchoolEvents.length > 0 && (
