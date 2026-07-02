@@ -1,7 +1,7 @@
 {
   "name": "BIZZ",
   "short_name": "BIZZ",
-  "start_url": "/home",
+  "start_url": "/calendar",
   "display": "standalone",
   "background_color": "#09090b",
   "theme_color": "#09090b",

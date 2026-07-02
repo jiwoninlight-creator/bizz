@@ -21,7 +21,7 @@ export default function QuickShell({ children }: QuickShellProps) {
       </div>
 
       <button
-        onClick={() => router.push('/home')}
+        onClick={() => router.push('/calendar')}
         className="mt-10 bg-white text-zinc-900 rounded-full px-6 py-3 text-sm font-medium hover:bg-zinc-100 transition-colors"
       >
         BIZZ 앱 열기

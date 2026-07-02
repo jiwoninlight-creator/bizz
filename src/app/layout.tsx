@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import AppToaster from "@/components/AppToaster";
 import "./globals.css";
@@ -12,6 +12,11 @@ const inter = Inter({
 export const metadata: Metadata = {
   title: "BIZZ",
   description: "학교 생활을 더 정돈되게 · 선생님 · 일정 · 자료",
+  manifest: "/manifest.json",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#09090b",
 };
 
 export default function RootLayout({
