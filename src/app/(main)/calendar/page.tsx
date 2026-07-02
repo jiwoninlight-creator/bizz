@@ -1152,15 +1152,15 @@ export default function CalendarPage() {
         </Button>
       </div>
 
-      <div className="flex items-center justify-center gap-3 text-[10px] text-zinc-500">
-        <span className="inline-flex items-center gap-1.5">
-          <span className="flex h-4 w-4 items-center justify-center rounded bg-zinc-900 text-[9px] font-bold text-white">
+      <div className="mb-2 flex items-center gap-3 text-[11px] text-zinc-300">
+        <span className="flex items-center gap-1">
+          <span className="flex h-3.5 w-3.5 items-center justify-center rounded bg-zinc-100 text-[8px] font-medium text-zinc-400">
             홀
           </span>
           홀수주
         </span>
-        <span className="inline-flex items-center gap-1.5">
-          <span className="flex h-4 w-4 items-center justify-center rounded border border-zinc-900 text-[9px] font-bold text-zinc-900">
+        <span className="flex items-center gap-1">
+          <span className="flex h-3.5 w-3.5 items-center justify-center rounded border border-zinc-100 text-[8px] font-medium text-zinc-300">
             짝
           </span>
           짝수주
@@ -1223,11 +1223,11 @@ export default function CalendarPage() {
                     )}
                   >
                     {weekType === 'odd' ? (
-                      <div className="mx-auto flex h-6 w-6 items-center justify-center rounded bg-zinc-900 text-[10px] font-bold text-white">
+                      <div className="mx-auto flex h-4 w-4 items-center justify-center rounded bg-zinc-100 text-[9px] font-medium text-zinc-400">
                         홀
                       </div>
                     ) : (
-                      <div className="mx-auto flex h-6 w-6 items-center justify-center rounded border border-zinc-900 text-[10px] font-bold text-zinc-900">
+                      <div className="mx-auto flex h-4 w-4 items-center justify-center rounded border border-zinc-100 text-[9px] font-medium text-zinc-300">
                         짝
                       </div>
                     )}
