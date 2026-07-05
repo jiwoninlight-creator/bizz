@@ -8,9 +8,8 @@ import {
   CalendarOffIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  CheckCircle2Icon,
   ClockIcon,
-  EyeIcon,
-  EyeOffIcon,
   FileEditIcon,
   GraduationCapIcon,
   ListIcon,
@@ -38,6 +37,7 @@ import { cn, getErrorMessage } from '@/lib/utils'
 import { toast } from 'sonner'
 import { SCHOOL_PERIODS, findPeriodByValue } from '@/lib/school-schedule'
 import { getWeekTypeForDate } from '@/lib/week-utils'
+import { formatRelativeTime } from '@/lib/format-time'
 import EmptyState from '@/components/EmptyState'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -280,6 +280,19 @@ function sortByDday(events: Event[]): Event[] {
   })
 }
 
+function sortByCompletionDate(
+  events: Event[],
+  getCompletionTime: (event: Event) => string
+): Event[] {
+  return [...events].sort(
+    (a, b) =>
+      new Date(getCompletionTime(b)).getTime() -
+      new Date(getCompletionTime(a)).getTime()
+  )
+}
+
+type ListCategory = EventType | 'completed'
+
 function inferEventType(title: string, fallback: EventType): EventType {
   if (/수행/.test(title)) return 'exam'
   if (/과제|숙제/.test(title)) return 'assignment'
@@ -310,10 +323,12 @@ export default function CalendarPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [memos, setMemos] = useState<DailyMemo[]>([])
   const [completions, setCompletions] = useState<Set<string>>(new Set())
+  const [completionTimes, setCompletionTimes] = useState<Map<string, string>>(
+    new Map()
+  )
   const [schoolEvents, setSchoolEvents] = useState<SchoolEvent[]>([])
   const [loading, setLoading] = useState(true)
-  const [listCategory, setListCategory] = useState<EventType>('assignment')
-  const [showCompleted, setShowCompleted] = useState(false)
+  const [listCategory, setListCategory] = useState<ListCategory>('assignment')
 
   // Dialog / form
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -396,7 +411,7 @@ export default function CalendarPage() {
 
     const completionsPromise = supabase
       .from('event_completions')
-      .select('event_id')
+      .select('event_id, completed_at')
       .eq('user_id', user.id)
 
     const schoolEventsPromise = supabase
@@ -427,10 +442,13 @@ export default function CalendarPage() {
 
     setEvents((eventData ?? []) as Event[])
     setMemos((memoData ?? []) as DailyMemo[])
-    setCompletions(
-      new Set(
-        ((completionData ?? []) as { event_id: string }[]).map((c) => c.event_id)
-      )
+    const completionRows = (completionData ?? []) as {
+      event_id: string
+      completed_at: string
+    }[]
+    setCompletions(new Set(completionRows.map((c) => c.event_id)))
+    setCompletionTimes(
+      new Map(completionRows.map((c) => [c.event_id, c.completed_at]))
     )
     setSchoolEvents((schoolEventData ?? []) as SchoolEvent[])
     setLoading(false)
@@ -494,6 +512,16 @@ export default function CalendarPage() {
       return completions.has(event.id)
     },
     [completions, user?.id]
+  )
+
+  const getCompletionTime = useCallback(
+    (event: Event): string => {
+      if (event.scope === 'personal' && event.user_id === user?.id) {
+        return event.completed_at ?? event.event_date
+      }
+      return completionTimes.get(event.id) ?? event.event_date
+    },
+    [completionTimes, user?.id]
   )
 
   const upcoming24h = useMemo(() => {
@@ -576,38 +604,56 @@ export default function CalendarPage() {
     })
   }, [events, currentMonth])
 
-  const visibleMonthEvents = useMemo(
-    () =>
-      showCompleted
-        ? monthEvents.filter((e) => isEventCompleted(e))
-        : monthEvents.filter((e) => !isEventCompleted(e)),
-    [monthEvents, showCompleted, isEventCompleted]
-  )
-
-  const monthEventsByType = useMemo(() => {
+  const incompleteMonthEventsByType = useMemo(() => {
     const groups: Record<EventType, Event[]> = {
       assignment: [],
       exam: [],
       personal: [],
     }
-    for (const e of visibleMonthEvents) groups[e.event_type].push(e)
+    for (const e of monthEvents) {
+      if (!isEventCompleted(e)) groups[e.event_type].push(e)
+    }
     return groups
-  }, [visibleMonthEvents])
+  }, [monthEvents, isEventCompleted])
+
+  const incompleteCounts = useMemo(
+    () => ({
+      assignment: incompleteMonthEventsByType.assignment.length,
+      exam: incompleteMonthEventsByType.exam.length,
+      personal: incompleteMonthEventsByType.personal.length,
+    }),
+    [incompleteMonthEventsByType]
+  )
+
+  const completedMonthEvents = useMemo(
+    () => monthEvents.filter((e) => isEventCompleted(e)),
+    [monthEvents, isEventCompleted]
+  )
+
+  const completedCount = completedMonthEvents.length
 
   const sortedByCategory = useMemo(
     () => ({
-      assignment: sortByDday(monthEventsByType.assignment),
-      exam: sortByDday(monthEventsByType.exam),
-      personal: sortByDday(monthEventsByType.personal),
+      assignment: sortByDday(incompleteMonthEventsByType.assignment),
+      exam: sortByDday(incompleteMonthEventsByType.exam),
+      personal: sortByDday(incompleteMonthEventsByType.personal),
     }),
-    [monthEventsByType]
+    [incompleteMonthEventsByType]
   )
+
+  const sortedCompletedMonthEvents = useMemo(
+    () => sortByCompletionDate(completedMonthEvents, getCompletionTime),
+    [completedMonthEvents, getCompletionTime]
+  )
+
+  const listTabCount = useMemo(() => {
+    if (listCategory === 'completed') return completedCount
+    return incompleteCounts[listCategory]
+  }, [listCategory, completedCount, incompleteCounts])
 
   const selectedDateKey = toDateKey(selectedDate)
   const allSelectedEvents = eventsByDate.get(selectedDateKey) ?? []
-  const selectedEvents = showCompleted
-    ? allSelectedEvents.filter((e) => isEventCompleted(e))
-    : allSelectedEvents.filter((e) => !isEventCompleted(e))
+  const selectedEvents = allSelectedEvents.filter((e) => !isEventCompleted(e))
   const selectedMemo = memoByDate.get(selectedDateKey)
   const selectedSchoolEvents = schoolEventsByDate.get(selectedDateKey) ?? []
 
@@ -898,9 +944,10 @@ export default function CalendarPage() {
     await fetchAll()
   }
 
-  const toggleCompletion = async (event: Event) => {
-    if (!user) return
+  const toggleCompletion = async (event: Event): Promise<boolean> => {
+    if (!user) return false
     const currentlyDone = isEventCompleted(event)
+    const prevCompletionTime = completionTimes.get(event.id)
     const supabase = createClient()
 
     // Optimistic UI
@@ -921,6 +968,12 @@ export default function CalendarPage() {
         const next = new Set(prev)
         if (currentlyDone) next.delete(event.id)
         else next.add(event.id)
+        return next
+      })
+      setCompletionTimes((prev) => {
+        const next = new Map(prev)
+        if (currentlyDone) next.delete(event.id)
+        else next.set(event.id, new Date().toISOString())
         return next
       })
     }
@@ -949,6 +1002,7 @@ export default function CalendarPage() {
         })
         if (error) throw error
       }
+      return true
     } catch (err) {
       console.error('Toggle completion failed:', err)
       // Rollback
@@ -959,7 +1013,7 @@ export default function CalendarPage() {
               ? {
                   ...e,
                   is_completed: currentlyDone,
-                  completed_at: currentlyDone ? new Date().toISOString() : null,
+                  completed_at: currentlyDone ? event.completed_at : null,
                 }
               : e
           )
@@ -971,8 +1025,26 @@ export default function CalendarPage() {
           else next.delete(event.id)
           return next
         })
+        setCompletionTimes((prev) => {
+          const next = new Map(prev)
+          if (currentlyDone) {
+            if (prevCompletionTime) next.set(event.id, prevCompletionTime)
+          } else {
+            next.delete(event.id)
+          }
+          return next
+        })
       }
       toast.error(`완료 처리에 실패했어요: ${getErrorMessage(err)}`)
+      return false
+    }
+  }
+
+  const handleListToggleDone = async (event: Event) => {
+    const wasCompleted = isEventCompleted(event)
+    const ok = await toggleCompletion(event)
+    if (ok && wasCompleted && listCategory === 'completed') {
+      setListCategory(event.event_type)
     }
   }
 
@@ -1167,26 +1239,6 @@ export default function CalendarPage() {
         </span>
       </div>
 
-      <div className="flex items-center justify-end">
-        <button
-          type="button"
-          onClick={() => setShowCompleted((v) => !v)}
-          className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800"
-        >
-          {showCompleted ? (
-            <>
-              <EyeOffIcon className="h-3 w-3" />
-              완료 목록 숨기기
-            </>
-          ) : (
-            <>
-              <EyeIcon className="h-3 w-3" />
-              완료 목록 보기
-            </>
-          )}
-        </button>
-      </div>
-
       {view === 'calendar' ? (
         <>
           <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
@@ -1239,9 +1291,7 @@ export default function CalendarPage() {
                     const isToday = isSameDay(d, today)
                     const isSelected = isSameDay(d, selectedDate)
                     const dayEvents = eventsByDate.get(key) ?? []
-                    const visibleDay = showCompleted
-                      ? dayEvents.filter((e) => isEventCompleted(e))
-                      : dayEvents.filter((e) => !isEventCompleted(e))
+                    const visibleDay = dayEvents.filter((e) => !isEventCompleted(e))
                     const typesInDay = new Set(visibleDay.map((e) => e.event_type))
                     const dayOfWeek = d.getDay()
                     const hasMemo = memoByDate.has(key)
@@ -1362,13 +1412,7 @@ export default function CalendarPage() {
             {loading ? (
               <LoadingSpinner />
             ) : selectedEvents.length === 0 ? (
-              <EmptyBox
-                message={
-                  showCompleted
-                    ? '완료된 일정이 없어요'
-                    : '이 날짜에는 일정이 없습니다'
-                }
-              />
+              <EmptyBox message="이 날짜에는 일정이 없습니다" />
             ) : (
               <ul className="space-y-2">
                 {selectedEvents.map((ev) => (
@@ -1400,7 +1444,7 @@ export default function CalendarPage() {
               {monthTitle}
             </span>
             <span className="text-xs text-zinc-500">
-              {showCompleted ? '완료 ' : ''}총 {visibleMonthEvents.length}개
+              {listCategory === 'completed' ? '완료 ' : ''}총 {listTabCount}개
             </span>
           </div>
 
@@ -1409,9 +1453,9 @@ export default function CalendarPage() {
           ) : (
             <Tabs
               value={listCategory}
-              onValueChange={(v) => setListCategory(v as EventType)}
+              onValueChange={(v) => setListCategory(v as ListCategory)}
             >
-              <TabsList className="grid w-full grid-cols-3">
+              <TabsList className="grid w-full grid-cols-4">
                 {EVENT_TYPE_ORDER.map((t) => (
                   <TabsTrigger key={t} value={t}>
                     <span className="flex items-center gap-1.5">
@@ -1423,11 +1467,18 @@ export default function CalendarPage() {
                       />
                       {LIST_CATEGORY_LABELS[t]}
                       <span className="text-xs text-zinc-500">
-                        {monthEventsByType[t].length}
+                        {incompleteCounts[t]}
                       </span>
                     </span>
                   </TabsTrigger>
                 ))}
+                <TabsTrigger value="completed">
+                  <span className="flex items-center gap-1.5">
+                    <CheckCircle2Icon className="h-3 w-3 text-emerald-600" />
+                    완료
+                    <span className="text-xs text-zinc-500">{completedCount}</span>
+                  </span>
+                </TabsTrigger>
               </TabsList>
               {EVENT_TYPE_ORDER.map((t) => (
                 <TabsContent key={t} value={t}>
@@ -1441,10 +1492,23 @@ export default function CalendarPage() {
                     teacherNames={teacherNames}
                     onDelete={handleDelete}
                     onEdit={openEditDialog}
-                    onToggleDone={toggleCompletion}
+                    onToggleDone={handleListToggleDone}
                   />
                 </TabsContent>
               ))}
+              <TabsContent value="completed">
+                <CompletedEventListSection
+                  events={sortedCompletedMonthEvents}
+                  getCompletionTime={getCompletionTime}
+                  currentUserId={user?.id}
+                  canEditEvent={canEditEvent}
+                  teacherUserIds={teacherUserIds}
+                  teacherNames={teacherNames}
+                  onDelete={handleDelete}
+                  onEdit={openEditDialog}
+                  onToggleDone={handleListToggleDone}
+                />
+              </TabsContent>
             </Tabs>
           )}
         </>
@@ -2081,6 +2145,166 @@ function SelectedEventItem({
             <Trash2Icon />
           </Button>
         )}
+      </div>
+    </li>
+  )
+}
+
+function CompletedEventListSection({
+  events,
+  getCompletionTime,
+  currentUserId,
+  canEditEvent,
+  teacherUserIds,
+  teacherNames,
+  onDelete,
+  onEdit,
+  onToggleDone,
+}: {
+  events: Event[]
+  getCompletionTime: (event: Event) => string
+  currentUserId?: string
+  canEditEvent: (e: Event) => boolean
+  teacherUserIds: Set<string>
+  teacherNames: Map<string, string>
+  onDelete: (id: string) => void
+  onEdit: (e: Event) => void
+  onToggleDone: (e: Event) => void
+}) {
+  if (events.length === 0) {
+    return (
+      <EmptyState
+        icon={CheckCircle2Icon}
+        title="완료된 일정이 없어요"
+        description="과제·수행평가·개인 일정을 완료하면 여기에 모여요."
+        compact
+      />
+    )
+  }
+  return (
+    <ul className="space-y-2">
+      {events.map((e) => (
+        <CompletedEventListItem
+          key={e.id}
+          event={e}
+          completedAt={getCompletionTime(e)}
+          own={e.user_id === currentUserId}
+          canEdit={canEditEvent(e)}
+          teacherName={
+            e.scope !== 'personal' && teacherUserIds.has(e.user_id)
+              ? teacherNames.get(e.user_id)
+              : undefined
+          }
+          onDelete={() => onDelete(e.id)}
+          onEdit={() => onEdit(e)}
+          onToggleDone={() => onToggleDone(e)}
+        />
+      ))}
+    </ul>
+  )
+}
+
+function CompletedEventListItem({
+  event,
+  completedAt,
+  own,
+  canEdit,
+  teacherName,
+  onDelete,
+  onEdit,
+  onToggleDone,
+}: {
+  event: Event
+  completedAt: string
+  own: boolean
+  canEdit: boolean
+  teacherName?: string
+  onDelete: () => void
+  onEdit: () => void
+  onToggleDone: () => void
+}) {
+  const meta = EVENT_TYPE_META[event.event_type]
+  return (
+    <li
+      className={cn(
+        'flex items-stretch gap-3 rounded-lg border p-3 transition-transform duration-100 active:scale-[0.98]',
+        meta.cardBg,
+        meta.cardBorder
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            <Badge
+              className={cn(
+                'h-4 px-1.5 text-[10px]',
+                meta.chipBg,
+                meta.chipText
+              )}
+              variant="secondary"
+            >
+              {LIST_CATEGORY_LABELS[event.event_type]}
+            </Badge>
+            <h3 className="line-clamp-1 text-sm font-semibold text-zinc-900">
+              {event.title}
+            </h3>
+          </div>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <input
+              type="checkbox"
+              checked
+              onChange={onToggleDone}
+              className="mr-1 h-4 w-4 rounded border-zinc-300 accent-green-600"
+              aria-label="완료 취소"
+            />
+            {canEdit && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                onClick={onEdit}
+                aria-label="일정 수정"
+                className="text-zinc-400 hover:text-zinc-900"
+              >
+                <PencilIcon />
+              </Button>
+            )}
+            {own && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-xs"
+                onClick={onDelete}
+                aria-label="일정 삭제"
+                className="text-zinc-400 hover:text-red-600"
+              >
+                <Trash2Icon />
+              </Button>
+            )}
+          </div>
+        </div>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-zinc-500">
+          <span>{formatFullDate(event.event_date)}</span>
+          {event.subject && (
+            <>
+              <span>·</span>
+              <span>{event.subject}</span>
+            </>
+          )}
+          <TimeChip event={event} />
+        </div>
+        <p className="mt-1 text-[11px] text-zinc-400">
+          완료 {formatRelativeTime(completedAt)}
+        </p>
+        {event.memo && (
+          <p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-zinc-700">
+            {event.memo}
+          </p>
+        )}
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          <ScopeChip event={event} teacherName={teacherName} />
+          <ApprovalChip event={event} />
+        </div>
       </div>
     </li>
   )
