@@ -39,6 +39,7 @@ import { SCHOOL_PERIODS, findPeriodByValue } from '@/lib/school-schedule'
 import { getWeekTypeForDate } from '@/lib/week-utils'
 import { formatRelativeTime } from '@/lib/format-time'
 import EmptyState from '@/components/EmptyState'
+import PersonalScheduleView from '@/components/PersonalScheduleView'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -66,7 +67,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 
-type ViewMode = 'calendar' | 'list'
+type ViewMode = 'calendar' | 'list' | 'personal_schedule'
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'] as const
 
@@ -1134,7 +1135,7 @@ export default function CalendarPage() {
 
   return (
     <div className="p-4 space-y-4">
-      {reminderTone !== 'none' && reminderFirst && (
+      {reminderTone !== 'none' && reminderFirst && view !== 'personal_schedule' && (
         <button
           type="button"
           onClick={() => setView('list')}
@@ -1165,32 +1166,44 @@ export default function CalendarPage() {
       )}
 
       <div className="inline-flex w-full rounded-lg bg-zinc-100 p-0.5">
-        {(['calendar', 'list'] as const).map((v) => {
-          const active = view === v
+        {(
+          [
+            { id: 'calendar' as const, label: '캘린더', icon: CalendarIcon },
+            { id: 'list' as const, label: '목록', icon: ListIcon },
+            {
+              id: 'personal_schedule' as const,
+              label: '내 시간표',
+              emoji: '🗓',
+            },
+          ] as const
+        ).map((seg) => {
+          const active = view === seg.id
           return (
             <button
-              key={v}
+              key={seg.id}
               type="button"
-              onClick={() => setView(v)}
+              onClick={() => setView(seg.id)}
               className={cn(
-                'flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-all duration-200',
+                'flex flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-sm font-medium transition-all duration-200',
                 active
                   ? 'bg-white text-zinc-900 shadow-sm'
                   : 'text-zinc-500 hover:text-zinc-700'
               )}
               aria-pressed={active}
             >
-              {v === 'calendar' ? (
-                <CalendarIcon className="h-3.5 w-3.5" />
+              {'icon' in seg && seg.icon ? (
+                <seg.icon className="h-3.5 w-3.5 shrink-0" />
               ) : (
-                <ListIcon className="h-3.5 w-3.5" />
+                <span className="text-sm leading-none">{'emoji' in seg ? seg.emoji : ''}</span>
               )}
-              <span>{v === 'calendar' ? '캘린더' : '목록'}</span>
+              <span className="truncate">{seg.label}</span>
             </button>
           )
         })}
       </div>
 
+      {view !== 'personal_schedule' && (
+        <>
       <div className="flex items-center justify-between">
         <Button
           variant="ghost"
@@ -1513,7 +1526,14 @@ export default function CalendarPage() {
           )}
         </>
       )}
+        </>
+      )}
 
+      <div className={view !== 'personal_schedule' ? 'hidden' : undefined}>
+        <PersonalScheduleView />
+      </div>
+
+      {view !== 'personal_schedule' && (
       <Button
         onClick={openAddDialog}
         size="lg"
@@ -1522,6 +1542,7 @@ export default function CalendarPage() {
         <PlusIcon className="h-5 w-5" />
         <span className="ml-1 text-sm font-semibold">일정 추가</span>
       </Button>
+      )}
 
       <Sheet open={dialogOpen} onOpenChange={setDialogOpen}>
         <SheetContent side="bottom" className="rounded-t-2xl">
