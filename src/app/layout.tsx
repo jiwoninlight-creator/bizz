@@ -13,6 +13,10 @@ export const metadata: Metadata = {
   title: "BIZZ",
   description: "학교 생활을 더 정돈되게 · 선생님 · 일정 · 자료",
   manifest: "/manifest.json",
+  icons: {
+    icon: "/icon-192.png",
+    apple: "/apple-icon.png",
+  },
 };
 
 export const viewport: Viewport = {

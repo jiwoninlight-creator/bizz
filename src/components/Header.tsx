@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import CommandSearch from '@/components/CommandSearch'
+import NotificationBell from '@/components/NotificationBell'
 import type { Teacher, TeacherStatus, User } from '@/types/database'
 
 const STATUS_DOT: Record<TeacherStatus, string> = {
@@ -200,6 +201,8 @@ export default function Header() {
           >
             <SearchIcon className="h-3.5 w-3.5" />
           </button>
+
+          <NotificationBell />
 
           <DropdownMenu>
             <DropdownMenuTrigger
